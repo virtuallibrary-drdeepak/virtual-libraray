@@ -20,23 +20,26 @@ export default function Header() {
 
         {/* Navigation moved to right */}
         <nav className="hidden md:flex items-center gap-6 text-sm ml-auto">
-          <a href="#whatyouget" className="hover:text-indigo-600">
+          <a href="/#whatyouget" className="hover:text-indigo-600">
             What You Get
           </a>
-          <a href="#meet" className="hover:text-indigo-600">
+          <a href="/#meet" className="hover:text-indigo-600">
             24/7 Meet
           </a>
-          <a href="#Community" className="hover:text-indigo-600">
+          <a href="/#Community" className="hover:text-indigo-600">
             Community & Safety
           </a>
-          <a href="#whyjoin" className="hover:text-indigo-600">
+          <a href="/#whyjoin" className="hover:text-indigo-600">
             Why Join This
           </a>
-          <a href="#Courses" className="hover:text-indigo-600">
+          <a href="/#Courses" className="hover:text-indigo-600">
             Courses
           </a>
-          <a href="#testimonials" className="hover:text-indigo-600">
+          <a href="/#testimonials" className="hover:text-indigo-600">
             Testimonials
+          </a>
+          <a href="/about" className="hover:text-indigo-600">
+            About
           </a>
           <a href="/contact" className="hover:text-indigo-600">
             Contact
@@ -68,23 +71,26 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-slate-100">
           <div className="px-4 pt-3 pb-6 space-y-2">
-            <a href="#whatyouget" className="block py-2">
+            <a href="/#whatyouget" className="block py-2">
               What You Get
             </a>
-            <a href="#meet" className="block py-2">
+            <a href="/#meet" className="block py-2">
               24/7 Meet
             </a>
-            <a href="#Community" className="block py-2">
+            <a href="/#Community" className="block py-2">
               Community &amp; Safety
             </a>
-            <a href="#whyjoin" className="block py-2">
+            <a href="/#whyjoin" className="block py-2">
               Why Join This
             </a>
-            <a href="#Courses" className="block py-2">
+            <a href="/#Courses" className="block py-2">
               Courses
             </a>
-            <a href="#testimonials" className="block py-2">
+            <a href="/#testimonials" className="block py-2">
               Testimonials
+            </a>
+            <a href="/about" className="block py-2">
+              About
             </a>
             <a href="/contact" className="block py-2">
               Contact
