@@ -1,14 +1,6 @@
 import { useState } from 'react'
 
-interface PaymentFormProps {
-  onPrivacyClick: () => void
-  onRefundClick: () => void
-}
-
-export default function PaymentForm({
-  onPrivacyClick,
-  onRefundClick,
-}: PaymentFormProps) {
+export default function PaymentForm() {
   const [discountExpanded, setDiscountExpanded] = useState(false)
 
   return (
@@ -83,20 +75,39 @@ export default function PaymentForm({
 
         {/* Payment Button */}
         <button className="w-full bg-black text-white rounded-lg py-3 text-base font-semibold flex items-center justify-center gap-2">
-          Make Payment
+          Join Virtual Library
           <span className="text-xl">→</span>
         </button>
 
         {/* Terms */}
         <p className="text-gray-600 text-sm mt-4 leading-relaxed">
           By continuing, you agree to our{' '}
-          <button onClick={onPrivacyClick} className="underline">
+          <a
+            href="/privacy-policy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[#a78bfa]"
+          >
             Privacy policy
-          </button>{' '}
-          and{' '}
-          <button onClick={onRefundClick} className="underline">
+          </a>
+          ,{' '}
+          <a
+            href="/refund-policy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[#a78bfa]"
+          >
             Refund policy
-          </button>
+          </a>
+          , and{' '}
+          <a
+            href="/terms-and-conditions"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[#a78bfa]"
+          >
+            Terms & Conditions
+          </a>
           .
         </p>
       </div>

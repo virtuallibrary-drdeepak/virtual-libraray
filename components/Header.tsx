@@ -38,6 +38,9 @@ export default function Header() {
           <a href="#testimonials" className="hover:text-indigo-600">
             Testimonials
           </a>
+          <a href="/contact" className="hover:text-indigo-600">
+            Contact
+          </a>
         </nav>
 
         {/* mobile menu icon */}
@@ -82,6 +85,9 @@ export default function Header() {
             </a>
             <a href="#testimonials" className="block py-2">
               Testimonials
+            </a>
+            <a href="/contact" className="block py-2">
+              Contact
             </a>
           </div>
         </div>

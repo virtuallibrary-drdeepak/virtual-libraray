@@ -6,6 +6,7 @@ interface HeroSectionProps {
   description: string
   showForm?: boolean
   children?: React.ReactNode
+  currentPage?: 'home' | 'neet-pg' | 'other-exams'
 }
 
 export default function HeroSection({
@@ -14,6 +15,7 @@ export default function HeroSection({
   description,
   showForm = false,
   children,
+  currentPage = 'home',
 }: HeroSectionProps) {
   return (
     <section
@@ -69,19 +71,25 @@ export default function HeroSection({
 
           {/* CTA Buttons */}
           <div className="mt-6 md:mt-10 flex gap-3 flex-wrap">
-            <Link
-              href="/neet-pg"
-              className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-purple-800 border border-white rounded-full text-sm md:text-base hover:bg-gray-50 transition"
-            >
-              NEET-PG →
-            </Link>
+            {/* Show NEET-PG button on home and other-exams pages */}
+            {currentPage !== 'neet-pg' && (
+              <Link
+                href="/neet-pg"
+                className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-purple-800 border border-white rounded-full text-sm md:text-base hover:bg-gray-50 transition"
+              >
+                NEET-PG →
+              </Link>
+            )}
 
-            <Link
-              href="/other-exams"
-              className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-purple-800 border border-white rounded-full text-sm md:text-base hover:bg-gray-50 transition"
-            >
-              Other Exams →
-            </Link>
+            {/* Show Other Exams button on home and neet-pg pages */}
+            {currentPage !== 'other-exams' && (
+              <Link
+                href="/other-exams"
+                className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-purple-800 border border-white rounded-full text-sm md:text-base hover:bg-gray-50 transition"
+              >
+                Other Exams →
+              </Link>
+            )}
           </div>
         </div>
 

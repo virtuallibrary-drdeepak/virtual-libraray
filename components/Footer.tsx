@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 export default function Footer() {
   const [showAboutModal, setShowAboutModal] = useState(false)
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false)
 
   return (
     <>
@@ -73,19 +72,25 @@ export default function Footer() {
           {/* Bottom Bar */}
           <div className="flex flex-col md:flex-row justify-between items-center w-full text-sm text-slate-500">
             <p>© 2025 Virtual Library. All rights reserved.</p>
-            <div className="flex gap-6 mt-3 md:mt-0">
+            <div className="flex flex-wrap justify-center gap-4 md:gap-6 mt-3 md:mt-0">
               <button
                 onClick={() => setShowAboutModal(true)}
                 className="hover:text-indigo-600"
               >
                 About Me
               </button>
-              <button
-                onClick={() => setShowPrivacyModal(true)}
-                className="hover:text-indigo-600"
-              >
+              <a href="/contact" className="hover:text-indigo-600">
+                Contact Us
+              </a>
+              <a href="/privacy-policy" className="hover:text-indigo-600">
                 Privacy Policy
-              </button>
+              </a>
+              <a href="/refund-policy" className="hover:text-indigo-600">
+                Refund Policy
+              </a>
+              <a href="/terms-and-conditions" className="hover:text-indigo-600">
+                Terms & Conditions
+              </a>
             </div>
           </div>
         </div>
@@ -155,74 +160,6 @@ export default function Footer() {
                 ensuring that students receive the support they need to remain calm,
                 confident, and resilient throughout their preparation journey.
               </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Privacy Modal */}
-      {showPrivacyModal && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowPrivacyModal(false)}
-        >
-          <div
-            className="bg-white w-full max-w-2xl rounded-2xl p-6 md:p-8 shadow-xl relative max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowPrivacyModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-xl"
-            >
-              ✕
-            </button>
-
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">
-              Privacy policy
-            </h2>
-
-            <div className="space-y-6 text-gray-700 leading-relaxed text-sm md:text-base">
-              <div>
-                <h3 className="font-semibold mb-1">Data Collection</h3>
-                <p>
-                  We collect basic details (name, email, phone number) only for
-                  registration and communication purposes.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-1">Data Usage</h3>
-                <p>
-                  Your information will be used strictly to provide services,
-                  updates, and reminders related to Virtual Library. We do not sell
-                  or share your personal data with third parties.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-1">Data Protection</h3>
-                <p>
-                  Groups are monitored to maintain a safe and respectful
-                  environment. Sensitive information shared in groups is
-                  community-based and voluntary.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-1">Communication</h3>
-                <p>
-                  By registering, you agree to receive service-related messages via
-                  WhatsApp, Telegram, or email.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-1">Opt-Out</h3>
-                <p>
-                  You may leave groups or unsubscribe from communication at any time
-                  by notifying us.
-                </p>
-              </div>
             </div>
           </div>
         </div>

@@ -55,11 +55,13 @@ const examSlides: ExamSlide[] = [
 
 export default function ExamCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [slidesPerView, setSlidesPerView] = useState(1)
+  const [isMounted, setIsMounted] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const scrollTo = (index: number) => {
     if (scrollRef.current) {
-      const slideWidth = scrollRef.current.offsetWidth / getSlidesPerView()
+      const slideWidth = scrollRef.current.offsetWidth / slidesPerView
       scrollRef.current.scrollTo({
         left: index * slideWidth,
         behavior: 'smooth',
@@ -69,7 +71,7 @@ export default function ExamCarousel() {
   }
 
   const next = () => {
-    const maxIndex = examSlides.length - getSlidesPerView()
+    const maxIndex = examSlides.length - slidesPerView
     if (currentIndex < maxIndex) {
       scrollTo(currentIndex + 1)
     }
@@ -90,7 +92,11 @@ export default function ExamCarousel() {
   }
 
   useEffect(() => {
+    setIsMounted(true)
+    setSlidesPerView(getSlidesPerView())
+
     const handleResize = () => {
+      setSlidesPerView(getSlidesPerView())
       scrollTo(currentIndex)
     }
     window.addEventListener('resize', handleResize)
@@ -133,62 +139,68 @@ export default function ExamCarousel() {
       </div>
 
       {/* Navigation Arrows */}
-      <button
-        onClick={prev}
-        disabled={currentIndex === 0}
-        className="hidden sm:flex absolute left-[-60px] top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center bg-white rounded-full shadow-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-      </button>
+      {isMounted && (
+        <>
+          <button
+            onClick={prev}
+            disabled={currentIndex === 0}
+            className="hidden sm:flex absolute left-[-60px] top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center bg-white rounded-full shadow-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
 
-      <button
-        onClick={next}
-        disabled={currentIndex >= examSlides.length - getSlidesPerView()}
-        className="hidden sm:flex absolute right-[-60px] top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center bg-white rounded-full shadow-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 5l7 7-7 7"
-          />
-        </svg>
-      </button>
+          <button
+            onClick={next}
+            disabled={currentIndex >= examSlides.length - slidesPerView}
+            className="hidden sm:flex absolute right-[-60px] top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center bg-white rounded-full shadow-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        </>
+      )}
 
       {/* Pagination Dots */}
-      <div className="flex justify-center gap-2 mt-6">
-        {Array.from({ length: Math.ceil(examSlides.length / getSlidesPerView()) }).map(
-          (_, index) => (
-            <button
-              key={index}
-              onClick={() => scrollTo(index)}
-              className={`w-2 h-2 rounded-full transition-all ${
-                currentIndex === index
-                  ? 'bg-purple-600 w-8'
-                  : 'bg-gray-300 hover:bg-gray-400'
-              }`}
-            />
-          )
-        )}
-      </div>
+      {isMounted && (
+        <div className="flex justify-center gap-2 mt-6">
+          {Array.from({ length: Math.ceil(examSlides.length / slidesPerView) }).map(
+            (_, index) => (
+              <button
+                key={index}
+                onClick={() => scrollTo(index)}
+                className={`w-2 h-2 rounded-full transition-all ${
+                  currentIndex === index
+                    ? 'bg-purple-600 w-8'
+                    : 'bg-gray-300 hover:bg-gray-400'
+                }`}
+              />
+            )
+          )}
+        </div>
+      )}
     </div>
   )
 }

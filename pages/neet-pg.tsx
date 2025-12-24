@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import Layout from '@/components/Layout'
 import HeroSection from '@/components/sections/HeroSection'
 import WhatYouGetSection from '@/components/sections/WhatYouGetSection'
@@ -8,14 +7,10 @@ import WhyJoinSection from '@/components/sections/WhyJoinSection'
 import VoiceSection from '@/components/sections/VoiceSection'
 import FAQSection from '@/components/sections/FAQSection'
 import PaymentForm from '@/components/PaymentForm'
-import { RefundModal, PrivacyModal } from '@/components/modals/PolicyModals'
 import { examFeatures } from '@/data/features'
 import { neetPGFaqs } from '@/data/faqs'
 
 export default function NEETPGPage() {
-  const [showRefundModal, setShowRefundModal] = useState(false)
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false)
-
   return (
     <Layout
       title="Medical Exam Access - Virtual Library"
@@ -26,11 +21,9 @@ export default function NEETPGPage() {
         subtitle="NEET-PG and Other Medical Exams"
         description="24/7 Virtual Library With Expert-Led Mental Health & Mentorship Sessions And Forest Groups To Keep You Consistent While Studying From Your Home."
         showForm
+        currentPage="neet-pg"
       >
-        <PaymentForm
-          onPrivacyClick={() => setShowPrivacyModal(true)}
-          onRefundClick={() => setShowRefundModal(true)}
-        />
+        <PaymentForm />
       </HeroSection>
 
       <WhatYouGetSection
@@ -147,16 +140,9 @@ export default function NEETPGPage() {
         href="#paymentForm"
         className="fixed bottom-0 left-0 w-full bg-black text-white py-4 px-5 flex items-center justify-between md:hidden z-50 rounded-t-2xl shadow-lg"
       >
-        <span className="text-lg font-semibold">Make Payment</span>
+        <span className="text-lg font-semibold">Join Virtual Library</span>
         <span className="text-2xl">→</span>
       </a>
-
-      {/* Modals */}
-      <RefundModal isOpen={showRefundModal} onClose={() => setShowRefundModal(false)} />
-      <PrivacyModal
-        isOpen={showPrivacyModal}
-        onClose={() => setShowPrivacyModal(false)}
-      />
     </Layout>
   )
 }
