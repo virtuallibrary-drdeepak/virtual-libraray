@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 export default function PaymentForm() {
-  const [discountExpanded, setDiscountExpanded] = useState(false)
+  // const [discountExpanded, setDiscountExpanded] = useState(false)
 
   return (
     <section id="paymentForm" className="px-4 py-0">
@@ -34,8 +34,8 @@ export default function PaymentForm() {
           className="w-full border border-gray-200 rounded-xl px-4 py-2.5 mb-3 text-gray-700 focus:outline-none focus:border-black"
         />
 
-        {/* Discount Code */}
-        {!discountExpanded ? (
+        {/* Discount Code - Hidden for now */}
+        {/* {!discountExpanded ? (
           <div
             onClick={() => setDiscountExpanded(true)}
             className="border border-gray-300 rounded-xl p-3 flex items-center justify-between cursor-pointer mb-4"
@@ -55,7 +55,7 @@ export default function PaymentForm() {
             />
             <button className="ml-3 text-indigo-600 font-semibold">Apply</button>
           </div>
-        )}
+        )} */}
 
         {/* Pricing */}
         <div className="flex justify-between text-gray-700 mb-2 text-sm">
