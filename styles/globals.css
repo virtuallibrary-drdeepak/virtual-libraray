@@ -59,6 +59,14 @@ select:focus {
   box-shadow: 0 0 0 2px #ede9fe;
 }
 
+/* Custom font size for hero title on desktop */
+@media (min-width: 768px) {
+  .md\:text-8xl {
+    font-size: 5.7rem !important;
+    line-height: 1.1 !important;
+  }
+}
+
 /* Mobile Responsive */
 @media (max-width: 640px) {
   .scrollbar-hide {
