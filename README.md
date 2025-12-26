@@ -1,165 +1,174 @@
-# Virtual Library - Next.js App
+# Virtual Library
 
-India's First Virtual Study Space - A modern Next.js application with TypeScript and Tailwind CSS.
+A Next.js application with MongoDB integration following industry-standard backend architecture.
 
-## 🚀 Quick Setup
+## ✨ Features
+
+- **Clean Architecture** - Separation of concerns with layered structure
+- **Type-Safe** - Full TypeScript coverage
+- **Scalable** - Easy to add new features
+- **Production-Ready** - Following industry best practices
+- **MongoDB Integration** - Singleton connection pattern
+- **Health Check API** - Database monitoring endpoint
+
+## 🏗️ Architecture
+
+```
+config/          → Configuration & constants
+types/           → TypeScript type definitions
+utils/           → Reusable helper functions
+services/        → Business logic layer (FAT)
+middleware/      → Request/response interceptors
+lib/             → Infrastructure utilities
+pages/api/       → API routes (THIN controllers)
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- MongoDB (local or Atlas)
+
+### Installation
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Start development server
-npm run dev
-
-# 3. Open in browser
-http://localhost:3000
 ```
+
+### Configuration
+
+Create a `.env.local` file:
+
+```env
+MONGODB_URI=mongodb://localhost:27017/virtual-library
+# Or for MongoDB Atlas:
+# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database
+```
+
+### Development
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 📡 API Endpoints
+
+### Health Check
+`GET /api/healthcheck` - Check database and system health
+
+**Response (Healthy):**
+```json
+{
+  "status": "healthy",
+  "database": {
+    "connected": true,
+    "name": "virtual-library"
+  },
+  "timestamp": "2025-12-24T19:30:00.000Z"
+}
+```
+
+**Response (Unhealthy):**
+```json
+{
+  "status": "unhealthy",
+  "database": {
+    "connected": false,
+    "error": "Connection failed"
+  },
+  "timestamp": "2025-12-24T19:30:00.000Z"
+}
+```
+
+## 🎯 Architecture Details
+
+### Layer Responsibilities
+
+1. **Config Layer** (`config/`) - Centralized configuration
+2. **Types Layer** (`types/`) - TypeScript interfaces
+3. **Utils Layer** (`utils/`) - Pure helper functions
+4. **Services Layer** (`services/`) - Business logic ⭐
+5. **Middleware Layer** (`middleware/`) - Auth, validation
+6. **API Routes** (`pages/api/`) - HTTP handling only
+
+### Key Principles
+
+- ✅ **Thin Controllers** - API routes only handle HTTP
+- ✅ **Fat Services** - Business logic in services layer
+- ✅ **Single Responsibility** - Each file has one job
+- ✅ **Dependency Injection** - Clear layer boundaries
+- ✅ **Type Safety** - TypeScript throughout
+
+## 📚 Documentation
+
+- **BACKEND_STRUCTURE.md** - Complete architecture guide
+- **RECOMMENDED_STRUCTURE.md** - Implementation details
+- **IMPLEMENTATION_SUMMARY.md** - What was built
+
+## 🛠️ Tech Stack
+
+- **Framework:** Next.js 14
+- **Language:** TypeScript
+- **Database:** MongoDB with Mongoose
+- **Styling:** Tailwind CSS
+- **Architecture:** Layered backend structure
 
 ## 📁 Project Structure
 
 ```
-├── components/          # Reusable React components
-│   ├── sections/       # Page sections (Hero, FAQ, etc.)
-│   ├── modals/         # Modal components
-│   └── ...            # Other UI components
-├── data/               # Content data (features, FAQs)
-├── pages/              # Next.js pages (routes)
-│   ├── index.tsx      # Home page (/)
-│   ├── neet-pg.tsx    # NEET-PG page (/neet-pg)
-│   └── other-exams.tsx # Other exams (/other-exams)
-├── public/img/         # Static images
-└── styles/             # Global CSS
+Virtual Library/
+├── config/                  # Configuration
+├── types/                   # TypeScript types
+├── utils/                   # Helper functions
+├── services/                # Business logic
+├── middleware/              # Middleware
+├── lib/                     # Infrastructure
+├── pages/
+│   ├── api/                # API routes
+│   └── ...                 # Frontend pages
+├── components/             # React components
+├── styles/                 # CSS styles
+└── public/                 # Static assets
 ```
 
-## 🛠️ Available Commands
+## 🧪 Testing
 
 ```bash
-npm run dev      # Start development server (localhost:3000)
-npm run build    # Build for production
-npm start        # Run production build
-npm run lint     # Check for code issues
+# Test health check
+curl http://localhost:3000/api/healthcheck
 ```
 
-## ✏️ How to Edit Content
+## 🎓 Adding New Features
 
-### Update Features/Cards
-Edit `data/features.ts`:
-```typescript
-export const homeFeatures = [
-  {
-    emoji: '🎯',
-    title: 'Feature Title',
-    description: 'Feature description',
-    bgColor: 'bg-[#f0f0f0]'
-  }
-]
+Follow the established pattern:
+
+```
+1. Create types in types/
+2. Add business logic in services/
+3. Create thin API route in pages/api/
+4. Use utils/ for helpers
+5. Add middleware if needed
 ```
 
-### Update FAQs
-Edit `data/faqs.ts`:
-```typescript
-export const neetPGFaqs = [
-  {
-    question: 'Your question?',
-    answer: 'Your answer (HTML supported)'
-  }
-]
+Example: Adding user management:
 ```
-
-### Change Section Content
-Edit component files in `components/sections/`:
-- `HeroSection.tsx` - Hero banner
-- `WhatYouGetSection.tsx` - Features section
-- `FAQSection.tsx` - FAQ accordion
-- etc.
-
-## 🎨 Tech Stack
-
-- **Next.js 14** - React framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **React 18** - UI library
-
-## 📦 Deployment
-
-### Deploy to Vercel (Recommended)
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel
+types/user.types.ts
+services/user.service.ts
+pages/api/users/index.ts
+pages/api/users/[id].ts
 ```
-
-### Deploy to Other Platforms
-1. Build: `npm run build`
-2. Upload `.next` folder and `package.json`
-3. Run: `npm start`
-
-## 🌐 Pages
-
-- **Home** - `/` - Landing page with courses carousel
-- **NEET-PG** - `/neet-pg` - Medical exam page with payment form
-- **Other Exams** - `/other-exams` - General exams page
-
-## 🔧 Customization
-
-### Add New Page
-Create `pages/new-page.tsx`:
-```typescript
-import Layout from '@/components/Layout'
-import HeroSection from '@/components/sections/HeroSection'
-
-export default function NewPage() {
-  return (
-    <Layout title="New Page">
-      <HeroSection title="Page Title" description="..." />
-    </Layout>
-  )
-}
-```
-
-### Change Colors
-Edit Tailwind classes in components or `tailwind.config.js`
-
-### Add Images
-Place images in `public/img/` and use `/img/filename.jpg` in code
-
-## 📝 Key Features
-
-- ✅ Fully responsive design
-- ✅ SEO optimized
-- ✅ Type-safe with TypeScript
-- ✅ DRY principles (no code duplication)
-- ✅ Custom carousels
-- ✅ Interactive FAQ accordion
-- ✅ Payment forms with modals
-- ✅ Mobile-friendly navigation
-
-## 🐛 Troubleshooting
-
-### Port already in use
-```bash
-npm run dev -- -p 3001  # Use different port
-```
-
-### Module not found
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-### Images not loading
-- Ensure images are in `public/img/` folder
-- Use `/img/filename.jpg` (not `./img/`)
-
-## 📚 Learn More
-
-- [Next.js Docs](https://nextjs.org/docs)
-- [React Docs](https://react.dev)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [TypeScript](https://www.typescriptlang.org/docs)
 
 ## 📄 License
 
-© 2025 Virtual Library. All rights reserved.
+MIT
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow the established architecture patterns.
+
+---
+
+**Built with industry best practices** 🚀
