@@ -53,7 +53,8 @@ export default function PublicRankings() {
     setLoading(true);
 
     try {
-      const response = await fetch(`/api/rankings/daily?date=${date}`);
+      // Request all rankings (no limit)
+      const response = await fetch(`/api/rankings/daily?date=${date}&limit=10000`);
       const result = await response.json();
 
       if (result.success) {

@@ -34,8 +34,8 @@ export const FILE_UPLOAD = {
 // Ranking Configuration
 export const RANKING = {
   EXCLUDED_NAMES: ['Virtual Library Admin'],
-  MAX_TOP_RANKS: 100,
-  DEFAULT_LIMIT: 100,
+  MAX_TOP_RANKS: 10000, // Allow up to 10,000 users in rankings
+  DEFAULT_LIMIT: 10000, // Default API limit for fetching rankings
 } as const;
 
 // Pricing Configuration

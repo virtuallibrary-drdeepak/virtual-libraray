@@ -58,7 +58,7 @@ export default async function handler(
       );
     }
 
-    // Parse limit
+    // Parse limit (default to getting all rankings)
     const limit = limitStr
       ? parseInt(limitStr as string)
       : RANKING.DEFAULT_LIMIT;
