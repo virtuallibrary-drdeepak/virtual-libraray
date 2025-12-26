@@ -6,12 +6,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { HealthService } from '@/services/health.service';
 import { sendError } from '@/utils/response';
-import { HealthCheckData } from '@/types/api.types';
+import { HealthCheckData, ApiResponse } from '@/types/api.types';
 import { HTTP_STATUS } from '@/config/constants';
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<HealthCheckData>
+  res: NextApiResponse<HealthCheckData | ApiResponse>
 ) {
   // Only allow GET method
   if (req.method !== 'GET') {
