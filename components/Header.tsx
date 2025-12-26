@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
+import { useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
 
 export default function Header() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header className="w-full border-b border-slate-100 bg-white fixed top-0 left-0 z-50 shadow-sm">
@@ -20,24 +20,16 @@ export default function Header() {
 
         {/* Navigation moved to right */}
         <nav className="hidden md:flex items-center gap-6 text-sm ml-auto">
-          <a href="/#whatyouget" className="hover:text-indigo-600">
-            What You Get
-          </a>
-          <a href="/#meet" className="hover:text-indigo-600">
-            24/7 Meet
-          </a>
-          <a href="/#Community" className="hover:text-indigo-600">
-            Community & Safety
+          <a href="/rankings" className="hover:text-indigo-600 font-semibold">
+            🏆 Daily Rankings
           </a>
           <a href="/#whyjoin" className="hover:text-indigo-600">
             Why Join This
           </a>
-          <a href="/#Courses" className="hover:text-indigo-600">
-            Courses
-          </a>
           <a href="/#testimonials" className="hover:text-indigo-600">
             Testimonials
           </a>
+
           <a href="/about" className="hover:text-indigo-600">
             About
           </a>
@@ -61,7 +53,7 @@ export default function Header() {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth="2"
-              d={mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 8h16M4 16h16'}
+              d={mobileMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 8h16M4 16h16"}
             ></path>
           </svg>
         </button>
@@ -89,6 +81,9 @@ export default function Header() {
             <a href="/#testimonials" className="block py-2">
               Testimonials
             </a>
+            <a href="/rankings" className="block py-2 font-semibold">
+              🏆 Rankings
+            </a>
             <a href="/about" className="block py-2">
               About
             </a>
@@ -99,6 +94,5 @@ export default function Header() {
         </div>
       )}
     </header>
-  )
+  );
 }
-
