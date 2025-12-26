@@ -18,7 +18,7 @@ function AdminRankingUpload() {
       const selectedFile = e.target.files[0];
       const fileType = selectedFile.name.toLowerCase();
       
-      if (!fileType.endsWith('.pdf') && !fileType.endsWith('.xlsx')) {
+      if (!fileType.endsWith('.pdf') && !fileType.endsWith('.xlsx') && !fileType.endsWith('.xls')) {
         setError('Please select a PDF or XLSX file');
         return;
       }
@@ -124,7 +124,7 @@ function AdminRankingUpload() {
                   <input
                     id="fileInput"
                     type="file"
-                    accept=".pdf,.xlsx"
+                    accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                     onChange={handleFileChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
                     required

@@ -5,9 +5,7 @@
 
 import * as XLSX from 'xlsx';
 import { ParsedAttendanceData, ParsedAttendanceEntry } from '@/types/ranking.types';
-
-// CommonJS import for pdf-parse (it doesn't have ESM default export)
-const pdfParse = require('pdf-parse');
+import PDFParser from 'pdf2json';
 
 export class FileParserService {
   /**
@@ -44,20 +42,51 @@ export class FileParserService {
    */
   static async parsePDF(buffer: Buffer): Promise<ParsedAttendanceData> {
     try {
-      const data = await pdfParse(buffer);
-      const text = data.text;
-
-      // Extract table data from PDF text
-      const entries = this.extractEntriesFromPDFText(text);
-
-      return {
-        entries,
-        metadata: {
-          fileName: 'attendance.pdf',
-          fileType: 'pdf',
-          totalEntries: entries.length,
-        },
-      };
+      return new Promise((resolve, reject) => {
+        const pdfParser = new PDFParser();
+        
+        pdfParser.on('pdfParser_dataError', (errData: any) => {
+          reject(new Error(`PDF parsing error: ${errData.parserError}`));
+        });
+        
+        pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+          try {
+            // Extract text from PDF
+            let text = '';
+            if (pdfData.Pages) {
+              pdfData.Pages.forEach((page: any) => {
+                if (page.Texts) {
+                  page.Texts.forEach((textItem: any) => {
+                    if (textItem.R) {
+                      textItem.R.forEach((run: any) => {
+                        text += decodeURIComponent(run.T) + ' ';
+                      });
+                    }
+                  });
+                  text += '\n';
+                }
+              });
+            }
+            
+            // Extract entries from the text
+            const entries = this.extractEntriesFromPDFText(text);
+            
+            resolve({
+              entries,
+              metadata: {
+                fileName: 'attendance.pdf',
+                fileType: 'pdf',
+                totalEntries: entries.length,
+              },
+            });
+          } catch (error: any) {
+            reject(new Error(`Failed to extract data from PDF: ${error.message}`));
+          }
+        });
+        
+        // Parse the buffer
+        pdfParser.parseBuffer(buffer);
+      });
     } catch (error: any) {
       throw new Error(`Failed to parse PDF file: ${error.message}`);
     }
@@ -93,7 +122,6 @@ export class FileParserService {
 
       // Validate dates
       if (isNaN(timeJoined.getTime()) || isNaN(timeExited.getTime())) {
-        console.warn('Invalid date for entry:', firstName, lastName || '(no last name)');
         return null;
       }
 
@@ -106,7 +134,6 @@ export class FileParserService {
         timeExited,
       };
     } catch (error) {
-      console.error('Error parsing row:', error);
       return null;
     }
   }
@@ -200,10 +227,10 @@ export class FileParserService {
 
       return result;
     } catch (error) {
-      console.error('Error parsing time:', timeStr, error);
-      return new Date(); // Return current date as fallback
+      return new Date();
     }
   }
+
 
   /**
    * Extract attendance entries from PDF text
@@ -212,31 +239,49 @@ export class FileParserService {
     const entries: ParsedAttendanceEntry[] = [];
     const lines = text.split('\n');
 
-    let currentEntry: Partial<ParsedAttendanceEntry> = {};
-    let fieldIndex = 0;
-
     for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.includes('First name') || trimmedLine.includes('Last name')) {
+      const trimmed = line.trim();
+      
+      // Skip empty lines and headers
+      if (!trimmed || trimmed.includes('First name') || trimmed.includes('Email')) {
         continue;
       }
 
-      // Simple state machine to extract fields in order
-      // This is a basic implementation - may need refinement based on actual PDF structure
-      const fields = trimmedLine.split(/\s{2,}/); // Split by multiple spaces
-
-      if (fields.length >= 5) {
-        // Full row
-        const [firstName, lastName, email, duration, timeJoined, timeExited] = fields;
-        entries.push({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: email && email.includes('@') ? email.trim().toLowerCase() : undefined,
-          duration: this.parseDuration(duration),
-          timeJoined: this.parseTime(timeJoined),
-          timeExited: this.parseTime(timeExited || timeJoined),
-        });
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 4) continue;
+      
+      // Find email (contains @)
+      const emailIndex = parts.findIndex(p => p.includes('@'));
+      if (emailIndex < 2) continue;
+      
+      const firstName = parts[0];
+      const lastName = parts[1];
+      const email = parts[emailIndex];
+      
+      // Extract duration parts (numbers and hr/min/sec)
+      const durationParts: string[] = [];
+      for (let j = emailIndex + 1; j < parts.length && durationParts.length < 4; j++) {
+        if (parts[j].match(/^\d+$|^(hr|min|sec)$/i)) {
+          durationParts.push(parts[j]);
+        } else if (durationParts.length > 0) break;
       }
+      
+      const duration = this.parseDuration(durationParts.join(' '));
+      if (duration <= 0) continue;
+      
+      // Extract times (after duration)
+      const timeStart = emailIndex + 1 + durationParts.length;
+      const timeJoined = parts.slice(timeStart, timeStart + 2).join(' ');
+      const timeExited = parts.slice(timeStart + 2, timeStart + 4).join(' ');
+      
+      entries.push({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
+        duration,
+        timeJoined: this.parseTime(timeJoined),
+        timeExited: this.parseTime(timeExited || timeJoined),
+      });
     }
 
     return entries;
@@ -246,10 +291,12 @@ export class FileParserService {
    * Determine file type from buffer
    */
   static getFileType(buffer: Buffer, mimeType?: string): 'pdf' | 'xlsx' | null {
-    // Check magic numbers
+    // Check magic numbers for PDF
     if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
       return 'pdf';
     }
+    
+    // Check for XLSX (ZIP format - XLSX files are zipped XML)
     if (buffer[0] === 0x50 && buffer[1] === 0x4B) {
       return 'xlsx';
     }
