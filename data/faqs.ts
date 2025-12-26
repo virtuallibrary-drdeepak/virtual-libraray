@@ -1,3 +1,5 @@
+import { PRICING } from '@/config/constants'
+
 export const neetPGFaqs = [
   {
     question: 'Is there any coupon code available?',
@@ -5,8 +7,8 @@ export const neetPGFaqs = [
       "Yes! 💬 Please message us on WhatsApp at +91 79744 25107, and we'll provide it to you.",
   },
   {
-    question: 'Till when is this ₹1999 plan valid?',
-    answer: 'The ₹1999 plan is valid until <strong>NEET-PG 2026</strong>.',
+    question: `Till when is this ₹${PRICING.MEMBERSHIP_FEE.toLocaleString('en-IN')} plan valid?`,
+    answer: `The ₹${PRICING.MEMBERSHIP_FEE.toLocaleString('en-IN')} plan is valid until <strong>NEET-PG 2026</strong>.`,
   },
   {
     question:

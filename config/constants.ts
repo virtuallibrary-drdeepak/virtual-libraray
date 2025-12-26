@@ -38,3 +38,9 @@ export const RANKING = {
   DEFAULT_LIMIT: 100,
 } as const;
 
+// Pricing Configuration
+export const PRICING = {
+  MEMBERSHIP_FEE: 10, // in rupees
+  ORIGINAL_PRICE: 3000, // in rupees (strikethrough price)
+  CURRENCY: 'INR',
+} as const;

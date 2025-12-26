@@ -24,7 +24,7 @@ export default function OtherExamsPage() {
         showForm
         currentPage="other-exams"
       >
-        <PaymentForm />
+        <PaymentForm examType="other-exams" />
       </HeroSection>
 
       <WhatYouGetSection

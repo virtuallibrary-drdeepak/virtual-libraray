@@ -1,38 +1,309 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import Script from 'next/script'
+import { useRouter } from 'next/router'
+import PaymentStatusModal from './modals/PaymentStatusModal'
+import { PRICING } from '@/config/constants'
 
-export default function PaymentForm() {
-  // const [discountExpanded, setDiscountExpanded] = useState(false)
+interface PaymentFormProps {
+  examType?: 'neet-pg' | 'other-exams'
+}
+
+export default function PaymentForm({ examType }: PaymentFormProps = {}) {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  
+  // Modal state
+  const [showModal, setShowModal] = useState(false)
+  const [modalStatus, setModalStatus] = useState<'success' | 'failed' | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [savedUserDetails, setSavedUserDetails] = useState<{name: string, email: string, phone: string} | undefined>()
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+  })
+  
+  // Form errors
+  const [errors, setErrors] = useState({
+    name: '',
+    email: '',
+    phone: '',
+  })
+
+  // Handle input changes
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error when user starts typing
+    if (errors[field as keyof typeof errors]) {
+      setErrors(prev => ({ ...prev, [field]: '' }))
+    }
+  }
+
+  // Validate form
+  const validateForm = () => {
+    const newErrors = {
+      name: '',
+      email: '',
+      phone: '',
+    }
+    
+    let isValid = true
+
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required'
+      isValid = false
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required'
+      isValid = false
+    } else if (!emailRegex.test(formData.email)) {
+      newErrors.email = 'Invalid email address'
+      isValid = false
+    }
+
+    const phoneRegex = /^[0-9]{10}$/
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Phone number is required'
+      isValid = false
+    } else if (!phoneRegex.test(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits'
+      isValid = false
+    }
+
+    setErrors(newErrors)
+    return isValid
+  }
+
+  // Handle payment
+  const handlePayment = async () => {
+    // Validate form
+    if (!validateForm()) {
+      return
+    }
+
+    if (!razorpayLoaded) {
+      alert('Payment gateway is loading. Please try again in a moment.')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // Create order on backend
+      const response = await fetch('/api/payment/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          amount: PRICING.MEMBERSHIP_FEE,
+          examType: examType || 'general',
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create order')
+      }
+
+      // Initialize Razorpay
+      const options: RazorpayOptions = {
+        key: data.data.keyId,
+        amount: data.data.amount,
+        currency: PRICING.CURRENCY,
+        name: 'Virtual Library',
+        description: 'One-time membership fee',
+        order_id: data.data.orderId,
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          contact: formData.phone,
+        },
+        theme: {
+          color: '#000000',
+        },
+        handler: async function (response: RazorpaySuccessResponse) {
+          // Verify payment on backend
+          await verifyPayment(response)
+        },
+        modal: {
+          ondismiss: function () {
+            setLoading(false)
+            console.log('Payment cancelled by user')
+          },
+        },
+      }
+
+      const razorpay = new window.Razorpay(options)
+      
+      // Handle payment failures
+      razorpay.on('payment.failed', function (response: any) {
+        console.error('Payment failed:', response.error)
+        
+        // Show failure modal
+        setErrorMessage(response.error.description || 'Payment failed. Please try again.')
+        setModalStatus('failed')
+        setShowModal(true)
+        setLoading(false)
+      })
+
+      razorpay.open()
+    } catch (error: any) {
+      console.error('Error initiating payment:', error)
+      
+      // Show failure modal
+      setErrorMessage(error.message || 'Failed to initiate payment. Please try again.')
+      setModalStatus('failed')
+      setShowModal(true)
+      setLoading(false)
+    }
+  }
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setShowModal(false)
+    setModalStatus(null)
+    setErrorMessage('')
+    setSavedUserDetails(undefined)
+  }
+
+  // Verify payment
+  const verifyPayment = async (response: RazorpaySuccessResponse) => {
+    try {
+      const verifyResponse = await fetch('/api/payment/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+        }),
+      })
+
+      const verifyData = await verifyResponse.json()
+
+      if (verifyResponse.ok) {
+        // Save user details before clearing form
+        setSavedUserDetails({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+        })
+        
+        // Payment successful - show success modal
+        setModalStatus('success')
+        setShowModal(true)
+        
+        // Clear form
+        setFormData({ name: '', email: '', phone: '' })
+      } else {
+        throw new Error(verifyData.message || 'Payment verification failed')
+      }
+    } catch (error: any) {
+      console.error('Error verifying payment:', error)
+      
+      // Save user details for failed payment too
+      setSavedUserDetails({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+      })
+      
+      // Show failure modal
+      setErrorMessage(error.message || 'Payment verification failed. Please contact support with your payment details.')
+      setModalStatus('failed')
+      setShowModal(true)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <section id="paymentForm" className="px-4 py-0">
-      <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-lg p-6 md:p-8 mt-12">
-        <p className="text-gray-600 mb-4 text-sm">
-          Access to this purchase will be sent to this email
-        </p>
+    <>
+      {/* Load Razorpay script */}
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        onLoad={() => setRazorpayLoaded(true)}
+        onError={() => console.error('Failed to load Razorpay script')}
+      />
+      
+      {/* Payment Status Modal */}
+      <PaymentStatusModal
+        isOpen={showModal}
+        status={modalStatus}
+        onClose={handleModalClose}
+        userDetails={savedUserDetails}
+        errorMessage={errorMessage}
+      />
+      
+      <section id="paymentForm" className="px-4 py-0">
+        <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-lg p-6 md:p-8 mt-12">
+          <p className="text-gray-600 mb-4 text-sm">
+            Access to this purchase will be sent to this email
+          </p>
 
-        <input
-          type="email"
-          placeholder="Email Address"
-          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 mb-3 text-gray-700 focus:outline-none focus:border-black"
-        />
+          <div className="mb-3">
+            <input
+              type="email"
+              placeholder="Email Address"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              className={`w-full border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-xl px-4 py-2.5 text-gray-700 focus:outline-none focus:border-black`}
+              disabled={loading}
+            />
+            {errors.email && (
+              <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+            )}
+          </div>
 
-        <div className="flex gap-2 mb-4">
-          <select className="border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:border-black">
-            <option>+91</option>
-          </select>
+          <div className="flex gap-2 mb-4">
+            <select 
+              className="border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none focus:border-black"
+              disabled={loading}
+            >
+              <option>+91</option>
+            </select>
 
-          <input
-            type="text"
-            placeholder="Add your phone number *"
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-700 focus:outline-none focus:border-black"
-          />
-        </div>
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Add your phone number *"
+                value={formData.phone}
+                onChange={(e) => handleInputChange('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                className={`w-full border ${errors.phone ? 'border-red-500' : 'border-gray-200'} rounded-xl px-4 py-2.5 text-gray-700 focus:outline-none focus:border-black`}
+                maxLength={10}
+                disabled={loading}
+              />
+              {errors.phone && (
+                <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
+              )}
+            </div>
+          </div>
 
-        <input
-          type="text"
-          placeholder="Name *"
-          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 mb-3 text-gray-700 focus:outline-none focus:border-black"
-        />
+          <div className="mb-3">
+            <input
+              type="text"
+              placeholder="Name *"
+              value={formData.name}
+              onChange={(e) => handleInputChange('name', e.target.value)}
+              className={`w-full border ${errors.name ? 'border-red-500' : 'border-gray-200'} rounded-xl px-4 py-2.5 text-gray-700 focus:outline-none focus:border-black`}
+              disabled={loading}
+            />
+            {errors.name && (
+              <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+            )}
+          </div>
 
         {/* Discount Code - Hidden for now */}
         {/* {!discountExpanded ? (
@@ -61,8 +332,8 @@ export default function PaymentForm() {
         <div className="flex justify-between text-gray-700 mb-2 text-sm">
           <span>Sub Total</span>
           <span>
-            ₹1,999
-            <span className="line-through text-gray-400 ml-2">₹3,000</span>
+            ₹{PRICING.MEMBERSHIP_FEE.toLocaleString('en-IN')}
+            <span className="line-through text-gray-400 ml-2">₹{PRICING.ORIGINAL_PRICE.toLocaleString('en-IN')}</span>
           </span>
         </div>
 
@@ -70,13 +341,32 @@ export default function PaymentForm() {
 
         <div className="flex justify-between text-lg font-semibold text-gray-900 mb-6">
           <span>Total</span>
-          <span>₹1,999</span>
+          <span>₹{PRICING.MEMBERSHIP_FEE.toLocaleString('en-IN')}</span>
         </div>
 
         {/* Payment Button */}
-        <button className="w-full bg-black text-white rounded-lg py-3 text-base font-semibold flex items-center justify-center gap-2">
-          Join Virtual Library
-          <span className="text-xl">→</span>
+        <button 
+          onClick={handlePayment}
+          disabled={loading || !razorpayLoaded}
+          className={`w-full bg-black text-white rounded-lg py-3 text-base font-semibold flex items-center justify-center gap-2 ${
+            loading || !razorpayLoaded ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'
+          }`}
+        >
+          {loading ? (
+            <>
+              <span className="animate-spin">⏳</span>
+              Processing...
+            </>
+          ) : !razorpayLoaded ? (
+            <>
+              <span>Loading Payment Gateway...</span>
+            </>
+          ) : (
+            <>
+              Join Virtual Library
+              <span className="text-xl">→</span>
+            </>
+          )}
         </button>
 
         {/* Terms */}
@@ -112,6 +402,6 @@ export default function PaymentForm() {
         </p>
       </div>
     </section>
+    </>
   )
 }
-

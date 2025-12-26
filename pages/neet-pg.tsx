@@ -23,7 +23,7 @@ export default function NEETPGPage() {
         showForm
         currentPage="neet-pg"
       >
-        <PaymentForm />
+        <PaymentForm examType="neet-pg" />
       </HeroSection>
 
       <WhatYouGetSection
