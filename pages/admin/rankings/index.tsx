@@ -20,6 +20,7 @@ function AdminRankings() {
   }, []);
 
   const fetchAvailableDates = async () => {
+    setLoading(true);
     try {
       const response = await fetch('/api/rankings/list?limit=30');
       const result = await response.json();
@@ -28,6 +29,8 @@ function AdminRankings() {
       }
     } catch (err) {
       console.error('Failed to fetch dates:', err);
+    } finally {
+      setLoading(false);
     }
   };
 

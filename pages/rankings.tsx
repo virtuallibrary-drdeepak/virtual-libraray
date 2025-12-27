@@ -32,6 +32,7 @@ export default function PublicRankings() {
   }, []);
 
   const fetchAvailableDates = async () => {
+    setLoading(true);
     try {
       const response = await fetch('/api/rankings/list?limit=30');
       const result = await response.json();
@@ -40,10 +41,13 @@ export default function PublicRankings() {
         // Auto-select most recent date
         const mostRecent = result.data[0].date;
         setSelectedDate(mostRecent);
-        fetchRankings(mostRecent);
+        await fetchRankings(mostRecent);
+      } else {
+        setLoading(false);
       }
     } catch (err) {
       console.error('Failed to fetch dates:', err);
+      setLoading(false);
     }
   };
 
