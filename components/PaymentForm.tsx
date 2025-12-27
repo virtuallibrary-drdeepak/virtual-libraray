@@ -33,6 +33,18 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
     phone: '',
   })
 
+  // Coupon state
+  const [discountExpanded, setDiscountExpanded] = useState(false)
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string
+    discountPercentage: number
+    discountAmount: number
+    discountedAmount: number
+  } | null>(null)
+  const [couponError, setCouponError] = useState('')
+  const [applyingCoupon, setApplyingCoupon] = useState(false)
+
   // Handle input changes
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -79,6 +91,54 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
     return isValid
   }
 
+  // Apply coupon code
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      setCouponError('Please enter a coupon code')
+      return
+    }
+
+    setApplyingCoupon(true)
+    setCouponError('')
+
+    try {
+      const response = await fetch('/api/payment/validate-coupon', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code: couponCode.trim() }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Invalid coupon code')
+      }
+
+      setAppliedCoupon({
+        code: data.data.code,
+        discountPercentage: data.data.discountPercentage,
+        discountAmount: data.data.discountAmount,
+        discountedAmount: data.data.discountedAmount,
+      })
+      setCouponError('')
+    } catch (error: any) {
+      setCouponError(error.message || 'Failed to apply coupon')
+      setAppliedCoupon(null)
+    } finally {
+      setApplyingCoupon(false)
+    }
+  }
+
+  // Remove applied coupon
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCode('')
+    setCouponError('')
+    setDiscountExpanded(false)
+  }
+
   // Handle payment
   const handlePayment = async () => {
     // Validate form
@@ -104,8 +164,9 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
-          amount: PRICING.MEMBERSHIP_FEE,
+          amount: PRICING.MEMBERSHIP_FEE, // Always send original amount, backend will apply discount
           examType: examType || 'general',
+          couponCode: appliedCoupon?.code,
         }),
       })
 
@@ -305,28 +366,65 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
             )}
           </div>
 
-        {/* Discount Code - Hidden for now */}
-        {/* {!discountExpanded ? (
-          <div
-            onClick={() => setDiscountExpanded(true)}
-            className="border border-gray-300 rounded-xl p-3 flex items-center justify-between cursor-pointer mb-4"
-          >
-            <div className="flex items-center gap-2">
-              <span>🏷️</span>
-              <span className="text-gray-700 font-medium">Have a Discount Code?</span>
+        {/* Discount Code */}
+        {!appliedCoupon ? (
+          !discountExpanded ? (
+            <div
+              onClick={() => setDiscountExpanded(true)}
+              className="border border-gray-300 rounded-xl p-3 flex items-center justify-between cursor-pointer mb-4"
+            >
+              <div className="flex items-center gap-2">
+                <span>🏷️</span>
+                <span className="text-gray-700 font-medium">Have a Discount Code?</span>
+              </div>
+              <span className="text-indigo-600 font-medium">Add</span>
             </div>
-            <span className="text-indigo-600 font-medium">Add</span>
-          </div>
+          ) : (
+            <div className="mb-4">
+              <div className="border border-indigo-500 rounded-xl p-3 flex items-center justify-between">
+                <input
+                  type="text"
+                  placeholder="Enter your discount code"
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value.toUpperCase())
+                    setCouponError('')
+                  }}
+                  className="w-full outline-none text-gray-800"
+                  disabled={applyingCoupon}
+                />
+                <button 
+                  onClick={handleApplyCoupon}
+                  disabled={applyingCoupon || !couponCode.trim()}
+                  className="ml-3 text-indigo-600 font-semibold disabled:opacity-50"
+                >
+                  {applyingCoupon ? 'Applying...' : 'Apply'}
+                </button>
+              </div>
+              {couponError && (
+                <p className="text-red-500 text-xs mt-1">{couponError}</p>
+              )}
+            </div>
+          )
         ) : (
-          <div className="border border-indigo-500 rounded-xl p-3 flex items-center justify-between mb-4">
-            <input
-              type="text"
-              placeholder="Enter your discount code"
-              className="w-full outline-none text-gray-800"
-            />
-            <button className="ml-3 text-indigo-600 font-semibold">Apply</button>
+          <div className="border border-green-500 bg-green-50 rounded-xl p-3 flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span>✓</span>
+              <div>
+                <span className="text-gray-700 font-medium">{appliedCoupon.code}</span>
+                <span className="text-green-600 text-sm ml-2">
+                  {appliedCoupon.discountPercentage}% off applied
+                </span>
+              </div>
+            </div>
+            <button 
+              onClick={handleRemoveCoupon}
+              className="text-red-600 font-medium text-sm"
+            >
+              Remove
+            </button>
           </div>
-        )} */}
+        )}
 
         {/* Pricing */}
         <div className="flex justify-between text-gray-700 mb-2 text-sm">
@@ -337,11 +435,20 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
           </span>
         </div>
 
+        {appliedCoupon && (
+          <div className="flex justify-between text-green-600 mb-2 text-sm">
+            <span>Discount ({appliedCoupon.discountPercentage}%)</span>
+            <span>-₹{appliedCoupon.discountAmount.toLocaleString('en-IN')}</span>
+          </div>
+        )}
+
         <hr className="my-3" />
 
         <div className="flex justify-between text-lg font-semibold text-gray-900 mb-6">
           <span>Total</span>
-          <span>₹{PRICING.MEMBERSHIP_FEE.toLocaleString('en-IN')}</span>
+          <span>
+            ₹{(appliedCoupon ? appliedCoupon.discountedAmount : PRICING.MEMBERSHIP_FEE).toLocaleString('en-IN')}
+          </span>
         </div>
 
         {/* Payment Button */}

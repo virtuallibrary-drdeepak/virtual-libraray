@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import Razorpay from 'razorpay';
 import connectDB from '@/lib/mongodb';
 import Payment, { PaymentStatus } from '@/models/Payment';
+import Coupon from '@/models/Coupon';
 import { apiResponse, apiError } from '@/utils/response';
 
 /**
@@ -28,7 +29,7 @@ export default async function handler(
     }
 
     // Extract and validate request body
-    const { name, email, phone, amount, examType } = req.body;
+    const { name, email, phone, amount, examType, couponCode } = req.body;
 
     // Validation
     if (!name || !email || !phone) {
@@ -54,6 +55,34 @@ export default async function handler(
     // Connect to database
     await connectDB();
 
+    // Handle coupon code if provided
+    let finalAmount = amount;
+    let couponData: any = {};
+    
+    if (couponCode) {
+      const couponResult = await Coupon.findAndValidate(couponCode);
+      
+      if (!couponResult.valid) {
+        return apiError(res, couponResult.message || 'Invalid coupon code', 400);
+      }
+      
+      const coupon = couponResult.coupon!;
+      const originalAmount = amount;
+      finalAmount = coupon.applyDiscount(amount);
+      const discountAmount = originalAmount - finalAmount;
+      
+      couponData = {
+        couponCode: coupon.code,
+        discountPercentage: coupon.discountPercentage,
+        discountAmount: discountAmount * 100, // Store in paise
+        originalAmount: originalAmount * 100, // Store in paise
+      };
+      
+      // Increment coupon usage count
+      coupon.usageCount += 1;
+      await coupon.save();
+    }
+
     // Initialize Razorpay instance
     const razorpay = new Razorpay({
       key_id: keyId,
@@ -62,7 +91,7 @@ export default async function handler(
 
     // Create Razorpay order
     const options = {
-      amount: amount * 100, // Convert to paise
+      amount: finalAmount * 100, // Convert to paise
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
       notes: {
@@ -70,6 +99,7 @@ export default async function handler(
         email,
         phone,
         examType: examType || 'general',
+        ...(couponCode && { couponCode }),
       },
     };
 
@@ -81,10 +111,11 @@ export default async function handler(
       email,
       phone,
       razorpayOrderId: razorpayOrder.id,
-      amount: amount * 100, // Store in paise
+      amount: finalAmount * 100, // Store in paise
       currency: 'INR',
       status: PaymentStatus.CREATED,
       examType,
+      ...couponData,
       metadata: {
         receipt: razorpayOrder.receipt,
       },

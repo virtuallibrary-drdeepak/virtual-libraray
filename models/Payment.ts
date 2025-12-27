@@ -27,8 +27,14 @@ export interface IPayment extends Document {
   
   // Payment details
   amount: number; // in paise (₹1999 = 199900 paise)
+  originalAmount?: number; // in paise - original amount before discount
   currency: string;
   status: PaymentStatus;
+  
+  // Coupon details
+  couponCode?: string;
+  discountPercentage?: number;
+  discountAmount?: number; // in paise
   
   // Additional tracking
   examType?: string; // 'neet-pg' or 'other-exams'
@@ -85,6 +91,9 @@ const PaymentSchema: Schema = new Schema(
       type: Number,
       required: [true, 'Amount is required'],
     },
+    originalAmount: {
+      type: Number,
+    },
     currency: {
       type: String,
       required: [true, 'Currency is required'],
@@ -95,6 +104,22 @@ const PaymentSchema: Schema = new Schema(
       enum: Object.values(PaymentStatus),
       default: PaymentStatus.CREATED,
       required: true,
+    },
+    
+    // Coupon details
+    couponCode: {
+      type: String,
+      uppercase: true,
+      trim: true,
+    },
+    discountPercentage: {
+      type: Number,
+      min: 0,
+      max: 100,
+    },
+    discountAmount: {
+      type: Number,
+      min: 0,
     },
     
     // Additional tracking
