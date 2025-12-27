@@ -106,7 +106,7 @@ export default async function handler(
     const razorpayOrder = await razorpay.orders.create(options);
 
     // Create payment record in database
-    const payment = await Payment.create({
+    const payment = new Payment({
       name,
       email,
       phone,
@@ -120,6 +120,7 @@ export default async function handler(
         receipt: razorpayOrder.receipt,
       },
     });
+    await payment.save();
 
     // Return order details to frontend
     return apiResponse(res, 'Order created successfully', {
