@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import Script from 'next/script'
 import { useRouter } from 'next/router'
-import PaymentStatusModal from './modals/PaymentStatusModal'
 import { PRICING } from '@/config/constants'
 
 interface PaymentFormProps {
@@ -12,12 +11,6 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [razorpayLoaded, setRazorpayLoaded] = useState(false)
-  
-  // Modal state
-  const [showModal, setShowModal] = useState(false)
-  const [modalStatus, setModalStatus] = useState<'success' | 'failed' | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string>('')
-  const [savedUserDetails, setSavedUserDetails] = useState<{name: string, email: string, phone: string} | undefined>()
   
   // Form state
   const [formData, setFormData] = useState({
@@ -210,10 +203,12 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
       razorpay.on('payment.failed', function (response: any) {
         console.error('Payment failed:', response.error)
         
-        // Show failure modal
-        setErrorMessage(response.error.description || 'Payment failed. Please try again.')
-        setModalStatus('failed')
-        setShowModal(true)
+        // Redirect to failure page
+        const errorMsg = response.error.description || 'Payment failed. Please try again.'
+        router.push({
+          pathname: '/payment-failed',
+          query: { error: errorMsg }
+        })
         setLoading(false)
       })
 
@@ -221,20 +216,14 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
     } catch (error: any) {
       console.error('Error initiating payment:', error)
       
-      // Show failure modal
-      setErrorMessage(error.message || 'Failed to initiate payment. Please try again.')
-      setModalStatus('failed')
-      setShowModal(true)
+      // Redirect to failure page
+      const errorMsg = error.message || 'Failed to initiate payment. Please try again.'
+      router.push({
+        pathname: '/payment-failed',
+        query: { error: errorMsg }
+      })
       setLoading(false)
     }
-  }
-
-  // Handle modal close
-  const handleModalClose = () => {
-    setShowModal(false)
-    setModalStatus(null)
-    setErrorMessage('')
-    setSavedUserDetails(undefined)
   }
 
   // Verify payment
@@ -255,16 +244,12 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
       const verifyData = await verifyResponse.json()
 
       if (verifyResponse.ok) {
-        // Save user details before clearing form
-        setSavedUserDetails({
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
+        // Payment successful - redirect to success page with secure token
+        const token = verifyData.data.paymentId; // Use payment ID as token
+        router.push({
+          pathname: '/payment-success',
+          query: { token }
         })
-        
-        // Payment successful - show success modal
-        setModalStatus('success')
-        setShowModal(true)
         
         // Clear form
         setFormData({ name: '', email: '', phone: '' })
@@ -274,17 +259,12 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
     } catch (error: any) {
       console.error('Error verifying payment:', error)
       
-      // Save user details for failed payment too
-      setSavedUserDetails({
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
+      // Redirect to failure page
+      const errorMsg = error.message || 'Payment verification failed. Please contact support with your payment details.'
+      router.push({
+        pathname: '/payment-failed',
+        query: { error: errorMsg }
       })
-      
-      // Show failure modal
-      setErrorMessage(error.message || 'Payment verification failed. Please contact support with your payment details.')
-      setModalStatus('failed')
-      setShowModal(true)
     } finally {
       setLoading(false)
     }
@@ -297,15 +277,6 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
         src="https://checkout.razorpay.com/v1/checkout.js"
         onLoad={() => setRazorpayLoaded(true)}
         onError={() => console.error('Failed to load Razorpay script')}
-      />
-      
-      {/* Payment Status Modal */}
-      <PaymentStatusModal
-        isOpen={showModal}
-        status={modalStatus}
-        onClose={handleModalClose}
-        userDetails={savedUserDetails}
-        errorMessage={errorMessage}
       />
       
       <section id="paymentForm" className="px-4 py-0">
