@@ -7,9 +7,12 @@ import CommunitySection from '@/components/sections/CommunitySection'
 import WhyJoinSection from '@/components/sections/WhyJoinSection'
 import TestimonialsSection from '@/components/sections/TestimonialsSection'
 import ExamCarousel from '@/components/ExamCarousel'
+import UserDashboard from '@/components/UserDashboard'
+import { useAuth } from '@/contexts/AuthContext'
 import { homeFeatures } from '@/data/features'
 
 export default function Home() {
+  const { isAuthenticated } = useAuth();
   useEffect(() => {
     // Smooth scroll for anchor links
     const handleAnchorClick = (e: MouseEvent) => {
@@ -30,10 +33,15 @@ export default function Home() {
 
   return (
     <Layout>
-      <HeroSection
-        title="India's First Virtual Study Space."
-        description="24/7 Virtual Library With Expert-Led Mental Health Sessions And Forest Groups For Consistent Study."
-      />
+      {/* Show Dashboard for logged in users, Hero for visitors */}
+      {isAuthenticated ? (
+        <UserDashboard />
+      ) : (
+        <HeroSection
+          title="India's First Virtual Study Space."
+          description="24/7 Virtual Library With Expert-Led Mental Health Sessions And Forest Groups For Consistent Study."
+        />
+      )}
 
       <WhatYouGetSection
         title="What You Get in One-Time Payment"

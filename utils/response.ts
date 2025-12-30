@@ -21,12 +21,14 @@ export const sendSuccess = <T>(
 export const sendError = (
   res: NextApiResponse<ApiResponse>,
   error: string,
-  statusCode = 500
+  statusCode = 500,
+  additionalData?: Record<string, any>
 ): void => {
   res.status(statusCode).json({
     success: false,
     error,
     timestamp: new Date().toISOString(),
+    ...additionalData,
   });
 };
 

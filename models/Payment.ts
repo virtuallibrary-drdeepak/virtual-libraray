@@ -15,7 +15,10 @@ export enum PaymentStatus {
  * Interface for Payment document
  */
 export interface IPayment extends Document {
-  // User details
+  // User reference (link to User model)
+  userId?: mongoose.Types.ObjectId;
+  
+  // User details (kept for backward compatibility)
   name: string;
   email: string;
   phone: string;
@@ -52,6 +55,13 @@ export interface IPayment extends Document {
  */
 const PaymentSchema: Schema = new Schema(
   {
+    // User reference (optional for now, for backward compatibility)
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
+    
     // User details
     name: {
       type: String,
@@ -148,8 +158,10 @@ const PaymentSchema: Schema = new Schema(
  * Indexes for better query performance
  * Note: razorpayOrderId has unique index from field definition
  * Note: razorpayPaymentId has sparse index from field definition
+ * Note: userId has index from field definition
  */
 PaymentSchema.index({ email: 1, status: 1 });
+PaymentSchema.index({ userId: 1, status: 1 });
 PaymentSchema.index({ createdAt: -1 });
 
 /**

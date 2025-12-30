@@ -1,6 +1,8 @@
 import '@/styles/globals.css'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
+import { AuthProvider } from '@/contexts/AuthContext'
+import LoginModal from '@/components/auth/LoginModal'
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
@@ -13,7 +15,10 @@ export default function App({ Component, pageProps }: AppProps) {
           rel="stylesheet"
         />
       </Head>
-      <Component {...pageProps} />
+      <AuthProvider>
+        <Component {...pageProps} />
+        <LoginModal />
+      </AuthProvider>
     </>
   )
 }

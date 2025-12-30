@@ -1,0 +1,308 @@
+=================================================================
+  VIRTUAL LIBRARY - OTP AUTHENTICATION SETUP GUIDE
+=================================================================
+
+This guide will help you set up the OTP-based authentication system
+for Virtual Library. The system is designed with email OTP support
+and ready for SMS OTP integration in the future.
+
+=================================================================
+STEP 1: INSTALL DEPENDENCIES
+=================================================================
+
+The system requires SendGrid for email OTP. Install it:
+
+npm install @sendgrid/mail
+
+All other dependencies should already be installed.
+
+=================================================================
+STEP 2: CREATE SENDGRID ACCOUNT
+=================================================================
+
+1. Go to https://sendgrid.com/
+2. Sign up for a free account (100 emails/day)
+3. Verify your email address
+4. Complete the signup process
+
+=================================================================
+STEP 3: GET SENDGRID API KEY
+=================================================================
+
+1. Login to SendGrid dashboard
+2. Go to Settings → API Keys
+3. Click "Create API Key"
+4. Name: "Virtual Library Production"
+5. Permissions: "Full Access" (or "Mail Send" only)
+6. Click "Create & View"
+7. COPY the API key (you won't see it again!)
+
+Example: SG.abc123xyz789...
+
+=================================================================
+STEP 4: VERIFY SENDER EMAIL
+=================================================================
+
+IMPORTANT: SendGrid requires sender verification
+
+Option A: Single Sender Verification (Recommended for testing)
+1. Go to Settings → Sender Authentication
+2. Click "Verify a Single Sender"
+3. Fill in your details:
+   - From Name: Virtual Library
+   - From Email: your-email@gmail.com (use your actual email)
+4. Check your email and verify
+
+Option B: Domain Authentication (For production)
+1. Go to Settings → Sender Authentication
+2. Click "Authenticate Your Domain"
+3. Follow DNS setup instructions for your domain
+4. Verification takes 24-48 hours
+
+=================================================================
+STEP 5: CONFIGURE ENVIRONMENT VARIABLES
+=================================================================
+
+1. Copy .env.example to .env.local:
+   cp .env.example .env.local
+
+2. Edit .env.local and add your credentials:
+
+   # SendGrid Configuration
+   SENDGRID_API_KEY=SG.your-actual-api-key-here
+   SENDER_EMAIL=your-verified-email@gmail.com
+   SENDER_NAME=Virtual Library
+
+   # JWT Secret (generate with: openssl rand -base64 32)
+   JWT_SECRET=your-generated-secret-here
+
+   # MongoDB (should already be configured)
+   MONGODB_URI=your-mongodb-connection-string
+
+   # Other existing variables...
+
+=================================================================
+STEP 6: TEST THE SYSTEM
+=================================================================
+
+1. Start the development server:
+   npm run dev
+
+2. Open http://localhost:3000
+
+3. Click "Login" button (you'll need to add this to your UI)
+
+4. Enter your email and name
+
+5. Click "Send OTP"
+
+6. Check your email for OTP code
+
+7. Enter the 6-digit code
+
+8. You should be logged in!
+
+=================================================================
+STEP 7: INTEGRATE LOGIN BUTTON
+=================================================================
+
+Add a login button to your Header component:
+
+import { useAuth } from '@/contexts/AuthContext';
+
+export default function Header() {
+  const { user, isAuthenticated, openLoginModal, logout } = useAuth();
+
+  return (
+    <header>
+      {/* ... existing header code ... */}
+      
+      {isAuthenticated ? (
+        <div>
+          <span>Welcome, {user.name}!</span>
+          <button onClick={logout}>Logout</button>
+        </div>
+      ) : (
+        <button onClick={openLoginModal}>Login</button>
+      )}
+    </header>
+  );
+}
+
+=================================================================
+STEP 8: PROTECT ROUTES (OPTIONAL)
+=================================================================
+
+To require authentication for specific pages:
+
+import withAuth from '@/utils/withAuth';
+
+function DashboardPage() {
+  return <div>Protected Dashboard</div>;
+}
+
+export default withAuth(DashboardPage);
+
+For premium-only pages:
+
+export default withAuth(DashboardPage, { 
+  requirePremium: true 
+});
+
+=================================================================
+STEP 9: TESTING CHECKLIST
+=================================================================
+
+Test these scenarios:
+
+✓ Send OTP to valid email
+✓ Receive OTP email within 30 seconds
+✓ Verify OTP successfully
+✓ User session persists after refresh
+✓ Invalid OTP shows error
+✓ Expired OTP (wait 5 minutes) shows error
+✓ Rate limiting (try sending 4+ OTPs quickly)
+✓ Resend OTP works after 60 seconds
+✓ Logout clears session
+✓ Protected routes redirect to login
+
+=================================================================
+STEP 10: PRODUCTION DEPLOYMENT
+=================================================================
+
+Before deploying to production:
+
+1. Domain Authentication (SendGrid)
+   - Authenticate your domain in SendGrid
+   - Update SENDER_EMAIL to your domain
+
+2. Environment Variables
+   - Add all env vars to your hosting platform
+   - Set NODE_ENV=production
+
+3. Rate Limiting
+   - Consider adding Redis for better rate limiting
+   - Current system uses MongoDB (works for small scale)
+
+4. Monitoring
+   - Monitor SendGrid delivery rates
+   - Set up alerts for failed emails
+   - Track user registration metrics
+
+=================================================================
+FUTURE: ADDING SMS OTP
+=================================================================
+
+When you're ready to add SMS OTP:
+
+1. Setup MSG91 or Twilio account
+2. Complete DLT registration (India)
+3. Get templates approved
+4. Add SMS credentials to .env.local:
+   MSG91_AUTH_KEY=your-key
+   MSG91_SENDER_ID=VRTLIB
+   MSG91_OTP_TEMPLATE_ID=your-template-id
+
+5. Uncomment SMS code in:
+   - /lib/email-provider.ts (sendOTPViaSMS function)
+   - /services/otp.service.ts (phone support)
+
+6. Update LoginModal to support phone input
+
+The system is already designed to handle both email and SMS!
+
+=================================================================
+TROUBLESHOOTING
+=================================================================
+
+Problem: OTP email not received
+Solution:
+  - Check spam folder
+  - Verify sender email in SendGrid
+  - Check SendGrid activity logs
+  - Verify API key is correct
+
+Problem: "Email service not configured" error
+Solution:
+  - Ensure SENDGRID_API_KEY is in .env.local
+  - Restart development server
+  - Check API key has proper permissions
+
+Problem: "Invalid OTP" error
+Solution:
+  - OTP expires in 5 minutes
+  - Check for typos
+  - Request a new OTP
+
+Problem: Rate limiting issues
+Solution:
+  - Wait 10 minutes
+  - Clear browser cookies
+  - Check MongoDB OTP collection
+
+Problem: User not found after login
+Solution:
+  - Check MongoDB connection
+  - Verify User model is imported correctly
+  - Check browser console for errors
+
+=================================================================
+SUPPORT & DOCUMENTATION
+=================================================================
+
+SendGrid Docs: https://docs.sendgrid.com/
+MongoDB Docs: https://docs.mongodb.com/
+Next.js Docs: https://nextjs.org/docs
+
+For issues, check:
+1. Browser console (F12)
+2. Terminal logs
+3. MongoDB logs
+4. SendGrid activity feed
+
+=================================================================
+ARCHITECTURE OVERVIEW
+=================================================================
+
+Database Models:
+  - User: Stores user profiles and auth data
+  - OTP: Stores OTP codes (auto-expires)
+  - Payment: Linked to User via userId
+
+API Endpoints:
+  - POST /api/auth/user/send-otp
+  - POST /api/auth/user/verify-otp
+  - POST /api/auth/user/resend-otp
+  - GET /api/auth/user/me
+  - POST /api/auth/user/logout
+
+Frontend Components:
+  - AuthContext: Global auth state
+  - LoginModal: OTP login UI
+  - OTPInput: 6-digit input
+  - withAuth: Route protection HOC
+
+Services:
+  - otp.service.ts: OTP logic & validation
+  - email-provider.ts: SendGrid integration
+
+Security Features:
+  - Rate limiting (3 OTPs per 10 mins)
+  - OTP expiry (5 minutes)
+  - Max attempts (5 tries)
+  - Bcrypt hashed OTPs
+  - HttpOnly cookies
+  - CSRF protection
+
+=================================================================
+READY TO GO!
+=================================================================
+
+Your authentication system is now set up and ready to use.
+Start the dev server and test the login flow!
+
+For questions or issues, refer to the troubleshooting section
+or check the inline code comments.
+
+Happy coding! 🚀
+

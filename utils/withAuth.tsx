@@ -1,45 +1,62 @@
+/**
+ * Admin Authentication HOC
+ * Protects admin routes - requires admin login
+ */
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 
-/**
- * Higher-Order Component to protect admin pages
- * Redirects to /login if user is not authenticated
- */
-export function withAuth<P extends object>(
-  WrappedComponent: React.ComponentType<P>
-) {
-  return function AuthComponent(props: P) {
+export function useLogout() {
+  const router = useRouter();
+
+  return async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      router.push('/admin/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+}
+
+export function withAuth<P extends object>(Component: React.ComponentType<P>) {
+  return function ProtectedRoute(props: P) {
     const router = useRouter();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-      const checkAuth = async () => {
-        try {
-          const response = await fetch('/api/auth/session');
-          
-          if (response.ok) {
-            setIsAuthenticated(true);
-          } else {
-            router.push('/login');
-          }
-        } catch (error) {
-          console.error('Auth check failed:', error);
-          router.push('/login');
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
       checkAuth();
-    }, [router]);
+    }, []);
+
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          router.push('/admin/login');
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push('/admin/login');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
     if (isLoading) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-            <p className="mt-4 text-gray-600">Verifying authentication...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
           </div>
         </div>
       );
@@ -49,27 +66,8 @@ export function withAuth<P extends object>(
       return null;
     }
 
-    return <WrappedComponent {...props} />;
+    return <Component {...props} />;
   };
 }
 
-/**
- * Hook to handle logout
- */
-export function useLogout() {
-  const router = useRouter();
-
-  const logout = async () => {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-      });
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
-
-  return logout;
-}
-
+export default withAuth;

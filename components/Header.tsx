@@ -1,9 +1,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated, openLoginModal, logout } = useAuth();
 
   return (
     <header className="w-full border-b border-slate-100 bg-white fixed top-0 left-0 z-50 shadow-sm">
@@ -36,6 +38,38 @@ export default function Header() {
           <a href="/contact" className="hover:text-indigo-600">
             Contact
           </a>
+
+          {/* User Authentication */}
+          {isAuthenticated ? (
+            <div className="flex items-center gap-4 ml-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold text-sm">
+                  {user?.name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-gray-800">
+                    {user?.name}
+                  </span>
+                  {user?.isPremium && (
+                    <span className="text-xs text-purple-600 font-medium">⭐ Premium</span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                className="text-sm text-gray-600 hover:text-red-600 transition"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={openLoginModal}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-5 py-2 rounded-lg font-semibold hover:from-purple-700 hover:to-purple-800 transition shadow-md hover:shadow-lg"
+            >
+              Login
+            </button>
+          )}
         </nav>
 
         {/* mobile menu icon */}
@@ -90,6 +124,38 @@ export default function Header() {
             <a href="/contact" className="block py-2">
               Contact
             </a>
+
+            {/* Mobile Login/User Info */}
+            <div className="pt-4 border-t border-slate-200">
+              {isAuthenticated ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 py-2">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold">
+                      {user?.name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-gray-800">{user?.name}</span>
+                      {user?.isPremium && (
+                        <span className="text-xs text-purple-600 font-medium">⭐ Premium</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="w-full text-left py-2 text-red-600 font-medium"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={openLoginModal}
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white px-5 py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-purple-800 transition shadow-md"
+                >
+                  Login
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

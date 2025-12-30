@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { withAuth } from '@/utils/withAuth';
+import withAuth from '@/utils/withAuth';
 
 function AdminIndex() {
   const router = useRouter();
