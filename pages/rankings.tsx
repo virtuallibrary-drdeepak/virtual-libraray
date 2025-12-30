@@ -24,15 +24,18 @@ export default function PublicRankings() {
   const [availableDates, setAvailableDates] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [rankingData, setRankingData] = useState<RankingData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true); // For initial page load
+  const [rankingsLoading, setRankingsLoading] = useState(false); // For rankings section only
   const [searchQuery, setSearchQuery] = useState('');
+  const [displayLimit, setDisplayLimit] = useState(100); // Show 100 initially
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     fetchAvailableDates();
   }, []);
 
   const fetchAvailableDates = async () => {
-    setLoading(true);
+    setInitialLoading(true);
     try {
       const response = await fetch('/api/rankings/list?limit=30');
       const result = await response.json();
@@ -41,24 +44,25 @@ export default function PublicRankings() {
         // Auto-select most recent date
         const mostRecent = result.data[0].date;
         setSelectedDate(mostRecent);
-        await fetchRankings(mostRecent);
-      } else {
-        setLoading(false);
+        await fetchRankings(mostRecent, true); // Pass true for initial load
       }
     } catch (err) {
       console.error('Failed to fetch dates:', err);
-      setLoading(false);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
-  const fetchRankings = async (date: string) => {
+  const fetchRankings = async (date: string, isInitial: boolean = false) => {
     if (!date) return;
 
-    setLoading(true);
+    if (!isInitial) {
+      setRankingsLoading(true);
+    }
 
     try {
-      // Request all rankings (no limit)
-      const response = await fetch(`/api/rankings/daily?date=${date}&limit=10000`);
+      // Request reasonable amount of rankings initially
+      const response = await fetch(`/api/rankings/daily?date=${date}&limit=500`);
       const result = await response.json();
 
       if (result.success) {
@@ -67,7 +71,9 @@ export default function PublicRankings() {
     } catch (err) {
       console.error('Failed to fetch rankings:', err);
     } finally {
-      setLoading(false);
+      if (!isInitial) {
+        setRankingsLoading(false);
+      }
     }
   };
 
@@ -75,6 +81,7 @@ export default function PublicRankings() {
     setSelectedDate(date);
     fetchRankings(date);
     setSearchQuery('');
+    setDisplayLimit(100); // Reset display limit when changing dates
   };
 
   const getDateLabel = (date: string) => {
@@ -100,10 +107,21 @@ export default function PublicRankings() {
     return date;
   };
 
-  const filteredRankings = rankingData?.rankings.filter(r => 
+  const allFilteredRankings = rankingData?.rankings.filter(r => 
     r.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     r.email?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
+  
+  // Apply display limit only when not searching
+  const filteredRankings = searchQuery 
+    ? allFilteredRankings 
+    : allFilteredRankings.slice(0, displayLimit);
+  
+  const hasMore = !searchQuery && allFilteredRankings.length > displayLimit;
+  
+  const loadMore = () => {
+    setDisplayLimit(prev => prev + 100);
+  };
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -124,21 +142,31 @@ export default function PublicRankings() {
         <div className="absolute inset-0 bg-gradient-to-r from-[#6b21a8]/95 via-[#6b21a8]/90 to-[#6b21a8]/80"></div>
         
         <div className="relative z-10 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 text-center text-white">
-          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-2 sm:mb-3">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-3 sm:mb-4">
             Daily Rankings
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-slate-200 max-w-2xl mx-auto mb-4 sm:mb-6 px-4">
-            Celebrating our top performers who dedicate their time to consistent study
+          <p className="text-base sm:text-lg md:text-xl text-slate-200 max-w-3xl mx-auto px-4 mb-6 sm:mb-8">
+            Celebrating top performers dedicated to consistent study
           </p>
           
-          {rankingData && (
-            <div className="flex items-center justify-center mt-4 sm:mt-6">
-              <div className="bg-white/10 backdrop-blur-sm px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-white/20">
-                <div className="text-3xl sm:text-4xl font-bold">{rankingData.totalParticipants}</div>
-                <div className="text-xs sm:text-sm text-slate-200 mt-1">Total Members</div>
+          <div className="flex items-center justify-center mt-4 sm:mt-6">
+            <div className="bg-gradient-to-r from-white/20 via-white/15 to-white/20 backdrop-blur-md px-10 sm:px-14 py-6 sm:py-8 rounded-3xl border border-white/40 shadow-2xl">
+              <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-white text-center">
+                Want to join this club? 🚀
+              </p>
+              <p className="text-sm sm:text-base md:text-lg text-purple-100 text-center mt-3 font-medium">
+                Study together, compete friendly, and rise to the top
+              </p>
+              <div className="flex justify-center mt-5 sm:mt-6">
+                <a
+                  href="/neet-pg"
+                  className="bg-white hover:bg-gray-100 text-purple-700 font-bold text-base sm:text-lg px-8 sm:px-10 py-3 sm:py-4 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                >
+                  Join Virtual Library
+                </a>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </section>
 
@@ -172,8 +200,8 @@ export default function PublicRankings() {
             </div>
           </div>
 
-          {/* Loading State */}
-          {loading && (
+          {/* Initial Loading State - Full Page */}
+          {initialLoading && (
             <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
               <svg className="animate-spin h-12 w-12 mx-auto text-purple-700" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -183,8 +211,19 @@ export default function PublicRankings() {
             </div>
           )}
 
+          {/* Rankings Loading State - Only for date changes */}
+          {rankingsLoading && (
+            <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+              <svg className="animate-spin h-10 w-10 mx-auto text-purple-700" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <p className="mt-3 text-gray-600 font-medium">Loading rankings...</p>
+            </div>
+          )}
+
           {/* Top 3 Podium */}
-          {!loading && rankingData && rankingData.rankings.length >= 3 && !searchQuery && (
+          {!initialLoading && !rankingsLoading && rankingData && rankingData.rankings.length >= 3 && !searchQuery && (
             <div className="mb-6 sm:mb-8">
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-10 text-center">
                 🏆 Top 3 Champions
@@ -236,7 +275,7 @@ export default function PublicRankings() {
           )}
 
           {/* Full Rankings Table */}
-          {!loading && filteredRankings.length > 0 && (
+          {!initialLoading && !rankingsLoading && filteredRankings.length > 0 && (
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-gray-200">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
@@ -245,7 +284,13 @@ export default function PublicRankings() {
                       {getDateLabel(selectedDate)}
                     </h2>
                     <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                      Showing {filteredRankings.length} member{filteredRankings.length !== 1 ? 's' : ''}
+                      {searchQuery ? (
+                        `Showing ${filteredRankings.length} result${filteredRankings.length !== 1 ? 's' : ''}`
+                      ) : (
+                        hasMore 
+                          ? `Showing ${filteredRankings.length} of ${allFilteredRankings.length} members`
+                          : `Showing all ${filteredRankings.length} member${filteredRankings.length !== 1 ? 's' : ''}`
+                      )}
                     </p>
                   </div>
                   
@@ -374,8 +419,21 @@ export default function PublicRankings() {
             </div>
           )}
 
+          {/* Load More Button */}
+          {!initialLoading && !rankingsLoading && hasMore && !searchQuery && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="bg-purple-700 hover:bg-purple-800 text-white font-semibold px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingMore ? 'Loading...' : `Load More (${allFilteredRankings.length - displayLimit} remaining)`}
+              </button>
+            </div>
+          )}
+
           {/* Empty State */}
-          {!loading && filteredRankings.length === 0 && rankingData && (
+          {!initialLoading && !rankingsLoading && filteredRankings.length === 0 && rankingData && (
             <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
               <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -396,7 +454,7 @@ export default function PublicRankings() {
           )}
 
           {/* No Data Available */}
-          {!loading && availableDates.length === 0 && (
+          {!initialLoading && availableDates.length === 0 && (
             <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
               <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
