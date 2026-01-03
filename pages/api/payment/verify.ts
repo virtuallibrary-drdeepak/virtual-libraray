@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import connectDB from '@/lib/mongodb';
 import Payment, { PaymentStatus } from '@/models/Payment';
 import { apiResponse, apiError } from '@/utils/response';
+import { createOrUpdateUserFromPayment } from '@/services/user-payment.service';
 
 /**
  * API Handler: Verify Razorpay Payment
@@ -64,6 +65,16 @@ export default async function handler(
       payment.paidAt = new Date();
       await payment.save();
 
+      // Create or update user based on successful payment
+      await createOrUpdateUserFromPayment({
+        email: payment.email,
+        name: payment.name,
+        phone: payment.phone,
+        examType: payment.examType,
+        isPaymentSuccessful: true,
+        paymentId: payment._id, // Link payment to user
+      });
+
       return apiResponse(res, 'Payment verified successfully', {
         status: 'success',
         paymentId: razorpay_payment_id,
@@ -79,6 +90,16 @@ export default async function handler(
       payment.status = PaymentStatus.FAILED;
       payment.failureReason = 'Signature verification failed';
       await payment.save();
+
+      // Create or update user even for failed payment (but not premium)
+      await createOrUpdateUserFromPayment({
+        email: payment.email,
+        name: payment.name,
+        phone: payment.phone,
+        examType: payment.examType,
+        isPaymentSuccessful: false,
+        paymentId: payment._id, // Link payment to user
+      });
 
       return apiError(res, 'Payment verification failed', 400);
     }

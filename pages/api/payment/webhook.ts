@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import connectDB from '@/lib/mongodb';
 import Payment, { PaymentStatus } from '@/models/Payment';
 import { apiResponse, apiError } from '@/utils/response';
+import { createOrUpdateUserFromPayment } from '@/services/user-payment.service';
 
 /**
  * API Handler: Razorpay Webhook
@@ -110,6 +111,16 @@ async function handlePaymentCaptured(paymentEntity: any) {
     payment.razorpayPaymentId = paymentEntity.id;
     payment.paidAt = new Date(paymentEntity.created_at * 1000);
     await payment.save();
+
+    // Create or update user with premium status
+    await createOrUpdateUserFromPayment({
+      email: payment.email,
+      name: payment.name,
+      phone: payment.phone,
+      examType: payment.examType,
+      isPaymentSuccessful: true,
+      paymentId: payment._id, // Link payment to user
+    });
   }
 }
 
@@ -126,6 +137,16 @@ async function handlePaymentFailed(paymentEntity: any) {
     payment.razorpayPaymentId = paymentEntity.id;
     payment.failureReason = paymentEntity.error_description || 'Payment failed';
     await payment.save();
+
+    // Create or update user even for failed payment (but not premium)
+    await createOrUpdateUserFromPayment({
+      email: payment.email,
+      name: payment.name,
+      phone: payment.phone,
+      examType: payment.examType,
+      isPaymentSuccessful: false,
+      paymentId: payment._id, // Link payment to user
+    });
   }
 }
 
@@ -141,6 +162,16 @@ async function handleOrderPaid(orderEntity: any) {
     payment.status = PaymentStatus.SUCCESS;
     payment.paidAt = new Date();
     await payment.save();
+
+    // Create or update user with premium status
+    await createOrUpdateUserFromPayment({
+      email: payment.email,
+      name: payment.name,
+      phone: payment.phone,
+      examType: payment.examType,
+      isPaymentSuccessful: true,
+      paymentId: payment._id, // Link payment to user
+    });
   }
 }
 
