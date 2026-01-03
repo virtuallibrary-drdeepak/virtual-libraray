@@ -76,6 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Hide welcome message after 5 seconds
         setTimeout(() => setShowWelcome(false), 5000);
         
+        // Redirect to dashboard after successful login
+        window.location.href = '/dashboard';
+        
         return { success: true };
       } else {
         return { success: false, error: result.error || result.message || 'Login failed' };

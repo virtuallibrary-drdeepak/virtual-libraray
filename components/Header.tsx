@@ -42,7 +42,7 @@ export default function Header() {
           {/* User Authentication */}
           {isAuthenticated ? (
             <div className="flex items-center gap-4 ml-2">
-              <div className="flex items-center gap-2">
+              <a href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition">
                 <div className={`w-8 h-8 rounded-full ${
                   user?.role === 'admin' 
                     ? 'bg-gradient-to-br from-indigo-500 to-purple-600' 
@@ -60,7 +60,7 @@ export default function Header() {
                     <span className="text-xs text-purple-600 font-medium">⭐ Premium</span>
                   ) : null}
                 </div>
-              </div>
+              </a>
               <button
                 onClick={logout}
                 className="text-sm text-gray-600 hover:text-red-600 transition"
@@ -142,7 +142,7 @@ export default function Header() {
             <div className="pt-4 border-t border-slate-200">
               {isAuthenticated ? (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 py-2">
+                  <a href="/dashboard" className="flex items-center gap-2 py-2 hover:opacity-80 transition">
                     <div className={`w-10 h-10 rounded-full ${
                       user?.role === 'admin'
                         ? 'bg-gradient-to-br from-indigo-500 to-purple-600'
@@ -158,7 +158,7 @@ export default function Header() {
                         <span className="text-xs text-purple-600 font-medium">⭐ Premium</span>
                       ) : null}
                     </div>
-                  </div>
+                  </a>
                   <button
                     onClick={logout}
                     className="w-full text-left py-2 text-red-600 font-medium"
