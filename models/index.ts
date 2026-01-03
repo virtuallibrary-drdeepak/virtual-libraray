@@ -18,6 +18,6 @@ export type { IUser } from './User';
 export type { IOTP } from './OTP';
 
 export { PaymentStatus } from './Payment';
-export { UserStatus, RegistrationSource } from './User';
+export { UserStatus, RegistrationSource, UserRole } from './User';
 export { OTPIdentifierType, OTPPurpose } from './OTP';
 

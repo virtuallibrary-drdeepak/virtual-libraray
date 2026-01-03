@@ -43,16 +43,22 @@ export default function Header() {
           {isAuthenticated ? (
             <div className="flex items-center gap-4 ml-2">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold text-sm">
+                <div className={`w-8 h-8 rounded-full ${
+                  user?.role === 'admin' 
+                    ? 'bg-gradient-to-br from-indigo-500 to-purple-600' 
+                    : 'bg-gradient-to-br from-purple-500 to-purple-700'
+                } flex items-center justify-center text-white font-semibold text-sm`}>
                   {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-gray-800">
                     {user?.name}
                   </span>
-                  {user?.isPremium && (
+                  {user?.role === 'admin' ? (
+                    <span className="text-xs text-indigo-600 font-medium">🛡️ Admin</span>
+                  ) : user?.isPremium ? (
                     <span className="text-xs text-purple-600 font-medium">⭐ Premium</span>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <button
@@ -97,6 +103,13 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-slate-100">
           <div className="px-4 pt-3 pb-6 space-y-2">
+            {/* Admin Link - mobile */}
+            {isAuthenticated && user?.role === 'admin' && (
+              <a href="/admin/rankings" className="block py-2 font-semibold text-indigo-600">
+                🛡️ Admin Dashboard
+              </a>
+            )}
+            
             <a href="/#whatyouget" className="block py-2">
               What You Get
             </a>
@@ -130,14 +143,20 @@ export default function Header() {
               {isAuthenticated ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 py-2">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold">
+                    <div className={`w-10 h-10 rounded-full ${
+                      user?.role === 'admin'
+                        ? 'bg-gradient-to-br from-indigo-500 to-purple-600'
+                        : 'bg-gradient-to-br from-purple-500 to-purple-700'
+                    } flex items-center justify-center text-white font-semibold`}>
                       {user?.name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                     <div className="flex flex-col">
                       <span className="font-semibold text-gray-800">{user?.name}</span>
-                      {user?.isPremium && (
+                      {user?.role === 'admin' ? (
+                        <span className="text-xs text-indigo-600 font-medium">🛡️ Admin</span>
+                      ) : user?.isPremium ? (
                         <span className="text-xs text-purple-600 font-medium">⭐ Premium</span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   <button

@@ -5,7 +5,7 @@
  */
 
 import bcrypt from 'bcryptjs';
-import { OTP, User, OTPIdentifierType, OTPPurpose, UserStatus } from '@/models';
+import { OTP, User, OTPIdentifierType, OTPPurpose, UserStatus, UserRole } from '@/models';
 import { sendOTPViaEmail } from '@/lib/email-provider';
 import connectDB from '@/lib/mongodb';
 
@@ -17,10 +17,10 @@ export const OTP_CONFIG = {
   EXPIRY_MINUTES: 5,
   MAX_ATTEMPTS: 5,
   RATE_LIMIT: {
-    MAX_REQUESTS: 3,
-    WINDOW_MINUTES: 10,
+    MAX_REQUESTS: 10, // Increased for development
+    WINDOW_MINUTES: 2, // Reduced for development
   },
-  RESEND_COOLDOWN_SECONDS: 60,
+  RESEND_COOLDOWN_SECONDS: 10, // Reduced for development (was 60)
 };
 
 /**
@@ -278,9 +278,14 @@ export async function verifyOTP(
 
     if (!user) {
       // Create new user only if doesn't exist
+      // Check if this email is an admin email
+      const adminEmail = process.env.ADMIN_EMAIL;
+      const isAdmin = normalizedIdentifier === adminEmail?.toLowerCase();
+      
       const userData: any = {
         name: name || 'User',
         status: UserStatus.ACTIVE,
+        role: isAdmin ? 'admin' : 'user',
         loginCount: 0,
         currentStreak: 0,
         longestStreak: 0,
@@ -308,10 +313,25 @@ export async function verifyOTP(
       
       console.log('✅ New user created:', user.email || user.phone);
     } else {
-      // User already exists - just update verification status if needed
+      // User already exists - update verification status and role if needed
       console.log('✅ Existing user found:', user.email || user.phone);
       
       let needsSave = false;
+
+      // Check if user should be admin based on ADMIN_EMAIL
+      const adminEmail = process.env.ADMIN_EMAIL;
+      const shouldBeAdmin = normalizedIdentifier === adminEmail?.toLowerCase();
+      const currentRole = user.role;
+      
+      if (shouldBeAdmin && currentRole !== UserRole.ADMIN) {
+        user.role = UserRole.ADMIN;
+        needsSave = true;
+        console.log('✅ User role updated to admin');
+      } else if (!shouldBeAdmin && currentRole === UserRole.ADMIN) {
+        user.role = UserRole.USER;
+        needsSave = true;
+        console.log('✅ User role updated to user');
+      }
 
       if (identifierType === OTPIdentifierType.EMAIL && !user.emailVerified) {
         user.emailVerified = true;
@@ -358,6 +378,7 @@ export async function verifyOTP(
         emailVerified: user.emailVerified,
         phoneVerified: user.phoneVerified,
         isPremium: user.isPremiumActive(),
+        role: user.role,
         examType: user.examType,
         currentStreak: user.currentStreak,
       },

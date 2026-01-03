@@ -1,54 +1,9 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
+import { IPayment, PaymentStatus } from '@/types';
 
-/**
- * Payment status enum
- */
-export enum PaymentStatus {
-  CREATED = 'created',
-  PENDING = 'pending',
-  SUCCESS = 'success',
-  FAILED = 'failed',
-  STUCK = 'stuck',
-}
-
-/**
- * Interface for Payment document
- */
-export interface IPayment extends Document {
-  // User reference (link to User model)
-  userId?: mongoose.Types.ObjectId;
-  
-  // User details (kept for backward compatibility)
-  name: string;
-  email: string;
-  phone: string;
-  
-  // Razorpay details
-  razorpayOrderId: string;
-  razorpayPaymentId?: string;
-  razorpaySignature?: string;
-  
-  // Payment details
-  amount: number; // in paise (₹1999 = 199900 paise)
-  originalAmount?: number; // in paise - original amount before discount
-  currency: string;
-  status: PaymentStatus;
-  
-  // Coupon details
-  couponCode?: string;
-  discountPercentage?: number;
-  discountAmount?: number; // in paise
-  
-  // Additional tracking
-  examType?: string; // 'neet-pg' or 'other-exams'
-  failureReason?: string;
-  metadata?: Record<string, any>;
-  
-  // Timestamps
-  createdAt: Date;
-  updatedAt: Date;
-  paidAt?: Date;
-}
+// Re-export for backward compatibility
+export type { IPayment };
+export { PaymentStatus };
 
 /**
  * Payment Schema

@@ -8,11 +8,13 @@ import WhyJoinSection from '@/components/sections/WhyJoinSection'
 import TestimonialsSection from '@/components/sections/TestimonialsSection'
 import ExamCarousel from '@/components/ExamCarousel'
 import UserDashboard from '@/components/UserDashboard'
+import AdminDashboard from '@/components/AdminDashboard'
 import { useAuth } from '@/contexts/AuthContext'
 import { homeFeatures } from '@/data/features'
+import { UserRole } from '@/types'
 
 export default function Home() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   useEffect(() => {
     // Smooth scroll for anchor links
     const handleAnchorClick = (e: MouseEvent) => {
@@ -33,60 +35,67 @@ export default function Home() {
 
   return (
     <Layout>
-      {/* Show Dashboard for logged in users, Hero for visitors */}
       {isAuthenticated ? (
-        <UserDashboard />
+        // Logged-in users see only their dashboard
+        user?.role === UserRole.ADMIN ? (
+          <AdminDashboard />
+        ) : (
+          <UserDashboard />
+        )
       ) : (
-        <HeroSection
-          title="India's First Virtual Study Space."
-          description="24/7 Virtual Library With Expert-Led Mental Health Sessions And Forest Groups For Consistent Study."
-        />
+        // Guest users see full marketing page
+        <>
+          <HeroSection
+            title="India's First Virtual Study Space."
+            description="24/7 Virtual Library With Expert-Led Mental Health Sessions And Forest Groups For Consistent Study."
+          />
+
+          <WhatYouGetSection
+            title="What You Get in One-Time Payment"
+            features={homeFeatures}
+          />
+
+          <MeetSection />
+
+          <CommunitySection />
+
+          <WhyJoinSection />
+
+          {/* Courses Section */}
+          <section className="py-20 bg-white text-center" id="Courses">
+            <div className="max-w-6xl mx-auto px-6">
+              <h2 className="text-4xl md:text-5xl text-gray-900">
+                This virtual study space is designed
+                <br />
+                for all types of exams.
+              </h2>
+              <p className="mt-4 text-slate-600 text-lg">
+                We Have Dedicated, Exam-Specific WhatsApp Groups For Discussions And Study
+                Material.
+              </p>
+
+              <div className="flex flex-wrap justify-center gap-3 mt-8">
+                {['UPSC', 'RAILWAY', 'BANKING SECTOR', 'STATE PSC', 'Any Indian Exam'].map(
+                  (exam) => (
+                    <button
+                      key={exam}
+                      className="px-5 py-2 bg-gray-100 rounded-full text-sm font-medium hover:bg-gray-200"
+                    >
+                      {exam}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <div className="mt-12">
+                <ExamCarousel />
+              </div>
+            </div>
+          </section>
+
+          <TestimonialsSection />
+        </>
       )}
-
-      <WhatYouGetSection
-        title="What You Get in One-Time Payment"
-        features={homeFeatures}
-      />
-
-      <MeetSection />
-
-      <CommunitySection />
-
-      <WhyJoinSection />
-
-      {/* Courses Section */}
-      <section className="py-20 bg-white text-center" id="Courses">
-        <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-4xl md:text-5xl text-gray-900">
-            This virtual study space is designed
-            <br />
-            for all types of exams.
-          </h2>
-          <p className="mt-4 text-slate-600 text-lg">
-            We Have Dedicated, Exam-Specific WhatsApp Groups For Discussions And Study
-            Material.
-          </p>
-
-          <div className="flex flex-wrap justify-center gap-3 mt-8">
-            {['UPSC', 'RAILWAY', 'BANKING SECTOR', 'STATE PSC', 'Any Indian Exam'].map(
-              (exam) => (
-                <button
-                  key={exam}
-                  className="px-5 py-2 bg-gray-100 rounded-full text-sm font-medium hover:bg-gray-200"
-                >
-                  {exam}
-                </button>
-              )
-            )}
-          </div>
-
-          <div className="mt-12">
-            <ExamCarousel />
-          </div>
-        </div>
-      </section>
-
-      <TestimonialsSection />
     </Layout>
   )
 }

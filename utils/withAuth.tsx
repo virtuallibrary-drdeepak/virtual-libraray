@@ -1,57 +1,39 @@
 /**
  * Admin Authentication HOC
- * Protects admin routes - requires admin login
+ * Protects admin routes - requires admin role
  */
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useLogout() {
-  const router = useRouter();
-
-  return async () => {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      router.push('/admin/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  const { logout } = useAuth();
+  return logout;
 }
 
 export function withAuth<P extends object>(Component: React.ComponentType<P>) {
   return function ProtectedRoute(props: P) {
     const router = useRouter();
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    const { user, isAuthenticated, isLoading, openLoginModal } = useAuth();
+    const [isChecking, setIsChecking] = useState(true);
 
     useEffect(() => {
-      checkAuth();
-    }, []);
-
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/auth/session', {
-          credentials: 'include',
-        });
-
-        if (response.ok) {
-          setIsAuthenticated(true);
+      if (!isLoading) {
+        if (!isAuthenticated) {
+          // Not logged in - open login modal
+          openLoginModal();
+          router.push('/');
+        } else if (user?.role !== 'admin') {
+          // Logged in but not admin
+          router.push('/');
         } else {
-          router.push('/admin/login');
+          setIsChecking(false);
         }
-      } catch (error) {
-        console.error('Auth check error:', error);
-        router.push('/admin/login');
-      } finally {
-        setIsLoading(false);
       }
-    };
+    }, [isAuthenticated, isLoading, user, router]);
 
-    if (isLoading) {
+    if (isLoading || isChecking) {
       return (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
@@ -62,7 +44,7 @@ export function withAuth<P extends object>(Component: React.ComponentType<P>) {
       );
     }
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated || user?.role !== 'admin') {
       return null;
     }
 

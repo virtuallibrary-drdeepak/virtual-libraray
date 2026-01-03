@@ -1,88 +1,15 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import { 
+  IUser, 
+  IUserModel, 
+  UserStatus, 
+  UserRole, 
+  RegistrationSource 
+} from '@/types';
 
-/**
- * User status enum
- */
-export enum UserStatus {
-  PENDING = 'pending', // Just created, not verified
-  ACTIVE = 'active', // Verified and active
-  SUSPENDED = 'suspended', // Temporarily suspended
-  DELETED = 'deleted', // Soft deleted
-}
-
-/**
- * Registration source enum
- */
-export enum RegistrationSource {
-  WEB = 'web',
-  MOBILE = 'mobile',
-  REFERRAL = 'referral',
-  ADMIN = 'admin',
-}
-
-/**
- * Interface for User document
- */
-export interface IUser extends Document {
-  // Authentication (flexible for email OR phone OR both)
-  phone?: string;
-  phoneVerified: boolean;
-  phoneVerifiedAt?: Date;
-  
-  email?: string;
-  emailVerified: boolean;
-  emailVerifiedAt?: Date;
-  
-  // Profile
-  name: string;
-  profilePicture?: string;
-  
-  // Exam & Preferences
-  examType?: 'neet-pg' | 'other-exams';
-  targetYear?: number;
-  
-  // Status & Tracking
-  status: UserStatus;
-  registrationSource: RegistrationSource;
-  
-  // Streak & Engagement (for future features)
-  currentStreak: number;
-  longestStreak: number;
-  lastActiveDate?: Date;
-  totalPoints: number;
-  
-  // Subscription/Payment
-  isPremium: boolean;
-  premiumExpiresAt?: Date;
-  paymentIds: mongoose.Types.ObjectId[];
-  
-  // Security & Login
-  lastLoginAt?: Date;
-  lastLoginIp?: string;
-  loginCount: number;
-  isBlocked: boolean;
-  blockedReason?: string;
-  blockedUntil?: Date;
-  
-  // Metadata
-  metadata?: Record<string, any>;
-  
-  // Timestamps
-  createdAt: Date;
-  updatedAt: Date;
-  
-  // Instance methods
-  isCurrentlyBlocked(): boolean;
-  isPremiumActive(): boolean;
-  getPrimaryIdentifier(): string;
-}
-
-/**
- * Interface for User Model with static methods
- */
-export interface IUserModel extends Model<IUser> {
-  findByIdentifier(identifier: string): Promise<IUser | null>;
-}
+// Re-export for backward compatibility
+export type { IUser, IUserModel };
+export { UserStatus, UserRole, RegistrationSource };
 
 /**
  * User Schema
@@ -143,6 +70,14 @@ const UserSchema: Schema = new Schema(
     profilePicture: {
       type: String,
       trim: true,
+    },
+    
+    // Role & Permissions
+    role: {
+      type: String,
+      enum: Object.values(UserRole),
+      default: UserRole.USER,
+      required: true,
     },
     
     // Exam & Preferences

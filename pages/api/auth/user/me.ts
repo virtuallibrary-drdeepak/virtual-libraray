@@ -69,6 +69,7 @@ export default async function handler(
           phone: user.phone,
           emailVerified: user.emailVerified,
           phoneVerified: user.phoneVerified,
+          role: user.role,
           profilePicture: user.profilePicture,
           examType: user.examType,
           targetYear: user.targetYear,
