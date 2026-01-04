@@ -4,6 +4,7 @@ import connectDB from '@/lib/mongodb';
 import Payment, { PaymentStatus } from '@/models/Payment';
 import { apiResponse, apiError } from '@/utils/response';
 import { createOrUpdateUserFromPayment } from '@/services/user-payment.service';
+import { sendPaymentConfirmationWhatsApp } from '@/services/whatsapp.service';
 
 /**
  * API Handler: Verify Razorpay Payment
@@ -73,6 +74,19 @@ export default async function handler(
         examType: payment.examType,
         isPaymentSuccessful: true,
         paymentId: payment._id, // Link payment to user
+      });
+
+      // Send WhatsApp confirmation (non-blocking)
+      sendPaymentConfirmationWhatsApp({
+        name: payment.name,
+        email: payment.email,
+        phone: payment.phone,
+        amount: payment.amount,
+        orderId: payment.razorpayOrderId,
+        paymentId: razorpay_payment_id,
+        isPremium: true,
+      }).catch((error) => {
+        console.error('WhatsApp notification failed (non-critical):', error);
       });
 
       return apiResponse(res, 'Payment verified successfully', {
