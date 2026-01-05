@@ -5,9 +5,11 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { AttendanceService } from '@/services/attendance.service';
+import { RankingService } from '@/services/ranking.service';
 import { sendSuccess, sendError } from '@/utils/response';
 import { HTTP_STATUS } from '@/config/constants';
 import { PaginatedResponse } from '@/types/api.types';
+import { verifyAuth } from '@/utils/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -24,6 +26,9 @@ export default async function handler(
   }
 
   try {
+    // Check if user is authenticated as admin
+    const isAdmin = verifyAuth(req) !== null;
+
     // Get query parameters
     const { page: pageStr, limit: limitStr } = req.query;
 
@@ -44,18 +49,25 @@ export default async function handler(
     const result = await AttendanceService.getAllRankings(page, limit);
 
     // Format response
-    const data = result.rankings.map(ranking => ({
-      date: ranking.date.toISOString().split('T')[0],
-      totalParticipants: ranking.totalParticipants,
-      computedAt: ranking.computedAt.toISOString(),
-      topRanking: ranking.rankings[0]
-        ? {
-            rank: ranking.rankings[0].rank,
-            fullName: ranking.rankings[0].fullName,
-            totalDurationFormatted: ranking.rankings[0].totalDurationFormatted,
-          }
-        : null,
-    }));
+    const data = result.rankings.map(ranking => {
+      // Filter rankings for non-admin users
+      const filteredRankings = isAdmin 
+        ? ranking.rankings 
+        : RankingService.filterForPublicView(ranking.rankings);
+      
+      return {
+        date: ranking.date.toISOString().split('T')[0],
+        totalParticipants: filteredRankings.length,
+        computedAt: ranking.computedAt.toISOString(),
+        topRanking: filteredRankings[0]
+          ? {
+              rank: filteredRankings[0].rank,
+              fullName: filteredRankings[0].fullName,
+              totalDurationFormatted: filteredRankings[0].totalDurationFormatted,
+            }
+          : null,
+      };
+    });
 
     return res.status(HTTP_STATUS.OK).json({
       success: true,

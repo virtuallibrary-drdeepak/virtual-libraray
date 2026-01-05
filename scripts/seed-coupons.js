@@ -64,6 +64,14 @@ const coupons = [
     maxUsage: null, // unlimited
   },
   {
+    code: 'SUPER15',
+    discountPercentage: 15,
+    expiryDate: new Date('2026-02-05T23:59:59.999Z'), // February 5, 2026
+    isActive: true,
+    usageCount: 0,
+    maxUsage: null, // unlimited
+  },
+  {
     code: 'VL20',
     discountPercentage: 20,
     expiryDate: new Date('2025-06-27T23:59:59.999Z'), // 6 months from now (June 27, 2025)
@@ -127,6 +135,7 @@ async function seedCoupons() {
     console.log('\n✅ Coupon seeding completed successfully!');
     console.log('\nCoupon Summary:');
     console.log('- NEWYEAR: 30% discount (expires Jan 3, 2026)');
+    console.log('- SUPER15: 15% discount (expires Feb 5, 2026)');
     console.log('- VL20: 20% discount (expires Jun 27, 2025)');
     console.log('- EARLYBIRD: 10% discount (expires Jun 27, 2025)');
     console.log('- VLDDTEST: 99% discount - TEST ONLY (expires Jun 27, 2025)');

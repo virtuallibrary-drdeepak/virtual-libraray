@@ -108,8 +108,8 @@ export default function PublicRankings() {
   };
 
   const allFilteredRankings = rankingData?.rankings.filter(r => 
-    r.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    (r.fullName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (r.email?.toLowerCase() || '').includes(searchQuery.toLowerCase())
   ) || [];
   
   // Apply display limit only when not searching

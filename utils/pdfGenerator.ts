@@ -1,10 +1,28 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { RANKING } from '@/config/constants';
+
+/**
+ * Format name to Title Case (capitalize first letter of each word)
+ */
+function formatNameToTitleCase(name: string): string {
+  if (!name) return name;
+  
+  return name
+    .toLowerCase()
+    .split(' ')
+    .map(word => {
+      if (word.length === 0) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+}
 
 interface RankingData {
   rank: number;
   fullName: string;
   email?: string;
+  totalDuration?: number;
   totalDurationFormatted: string;
   sessionCount: number;
 }
@@ -20,9 +38,43 @@ interface PDFOptions {
   date: string;
   rankings: RankingData[];
   statistics: Statistics;
+  includeAllDurations?: boolean; // If true, include all durations (admin view). Default false - filters out > 15.5 hours
 }
 
-export const generateRankingsPDF = ({ date, rankings, statistics }: PDFOptions) => {
+export const generateRankingsPDF = ({ 
+  date, 
+  rankings, 
+  statistics,
+  includeAllDurations = false 
+}: PDFOptions) => {
+  // Filter rankings for public view unless includeAllDurations is true
+  let filteredRankings = rankings;
+  if (!includeAllDurations) {
+    filteredRankings = rankings
+      .filter(r => !r.totalDuration || r.totalDuration <= RANKING.MAX_DISPLAYABLE_DURATION)
+      .map((r, index) => {
+        // Handle Mongoose documents by converting to plain object
+        const plainRanking = (r as any).toObject ? (r as any).toObject() : r;
+        
+        return {
+          rank: index + 1, // Recalculate ranks starting from 1
+          fullName: formatNameToTitleCase(plainRanking.fullName),
+          email: plainRanking.email,
+          totalDuration: plainRanking.totalDuration,
+          totalDurationFormatted: plainRanking.totalDurationFormatted,
+          sessionCount: plainRanking.sessionCount,
+        };
+      });
+  } else {
+    // Apply title case formatting even when including all durations
+    filteredRankings = rankings.map(r => {
+      const plainRanking = (r as any).toObject ? (r as any).toObject() : r;
+      return {
+        ...plainRanking,
+        fullName: formatNameToTitleCase(plainRanking.fullName),
+      };
+    });
+  }
   // Create PDF in A4 format
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -72,7 +124,7 @@ export const generateRankingsPDF = ({ date, rankings, statistics }: PDFOptions) 
   currentY += 12;
 
   // Prepare table data - Rank, Name, and Hours
-  const tableData = rankings.map((ranking) => {
+  const tableData = filteredRankings.map((ranking) => {
     return [
       ranking.rank.toString(),
       ranking.fullName,

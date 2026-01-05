@@ -9,6 +9,7 @@ import { RankingService } from '@/services/ranking.service';
 import { sendSuccess, sendError } from '@/utils/response';
 import { HTTP_STATUS, RANKING } from '@/config/constants';
 import { ApiResponse, RankingEntry } from '@/types/api.types';
+import { verifyAuth } from '@/utils/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -27,6 +28,9 @@ export default async function handler(
   try {
     // Get query parameters
     const { date: dateStr, limit: limitStr, search } = req.query;
+
+    // Check if user is authenticated as admin
+    const isAdmin = verifyAuth(req) !== null;
 
     // Default to today if no date provided
     const date = dateStr
@@ -61,6 +65,11 @@ export default async function handler(
     // Apply filters
     let filteredRankings = ranking.rankings;
     
+    // Filter excessive durations for non-admin users
+    if (!isAdmin) {
+      filteredRankings = RankingService.filterForPublicView(filteredRankings);
+    }
+    
     if (search) {
       filteredRankings = RankingService.filterRankings(filteredRankings, {
         searchQuery: search as string,
@@ -70,10 +79,15 @@ export default async function handler(
     // Apply limit
     filteredRankings = filteredRankings.slice(0, limit);
 
-    // Get statistics
-    const statistics = RankingService.getRankingStatistics(ranking.rankings);
+    // Get statistics based on filtered rankings for consistency
+    const statistics = RankingService.getRankingStatistics(
+      isAdmin ? ranking.rankings : RankingService.filterForPublicView(ranking.rankings)
+    );
 
     // Format response
+    // For non-admin, show participant count after filtering
+    const baseRankings = isAdmin ? ranking.rankings : RankingService.filterForPublicView(ranking.rankings);
+    
     const response = {
       date: ranking.date.toISOString().split('T')[0],
       rankings: filteredRankings.map(r => ({
@@ -86,7 +100,7 @@ export default async function handler(
         totalDurationFormatted: r.totalDurationFormatted,
         sessionCount: r.sessionCount,
       })),
-      totalParticipants: ranking.totalParticipants,
+      totalParticipants: baseRankings.length,
       computedAt: ranking.computedAt.toISOString(),
       statistics,
     };
