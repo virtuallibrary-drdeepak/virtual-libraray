@@ -15,6 +15,22 @@ import { RANKING } from '@/config/constants';
 
 export class RankingService {
   /**
+   * Format name to Title Case (capitalize first letter of each word)
+   */
+  static formatNameToTitleCase(name: string): string {
+    if (!name) return name;
+    
+    return name
+      .toLowerCase()
+      .split(' ')
+      .map(word => {
+        if (word.length === 0) return word;
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(' ');
+  }
+
+  /**
    * Aggregate attendance entries by attendee
    * Combines multiple sessions for the same person
    */
@@ -114,9 +130,9 @@ export class RankingService {
 
       return {
         rank: index + 1,
-        fullName,
-        firstName: attendee.identifier.firstName,
-        lastName: attendee.identifier.lastName || '',
+        fullName: this.formatNameToTitleCase(fullName),
+        firstName: this.formatNameToTitleCase(attendee.identifier.firstName),
+        lastName: this.formatNameToTitleCase(attendee.identifier.lastName || ''),
         email: attendee.identifier.email,
         totalDuration: attendee.totalDuration,
         totalDurationFormatted: this.formatDuration(attendee.totalDuration),
@@ -190,6 +206,7 @@ export class RankingService {
     rankings: IRankingEntry[],
     filters: {
       minDuration?: number; // in minutes
+      maxDuration?: number; // in minutes
       searchQuery?: string; // search in name or email
       topN?: number;
     }
@@ -201,12 +218,21 @@ export class RankingService {
       filtered = filtered.filter(r => r.totalDuration >= filters.minDuration);
     }
 
+    // Filter by maximum duration
+    if (filters.maxDuration !== undefined) {
+      filtered = filtered.filter(r => {
+        // Keep entries with valid totalDuration that are <= maxDuration
+        const duration = r.totalDuration;
+        return duration !== undefined && duration !== null && duration <= filters.maxDuration!;
+      });
+    }
+
     // Filter by search query
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter(
         r =>
-          r.fullName.toLowerCase().includes(query) ||
+          r.fullName?.toLowerCase().includes(query) ||
           r.email?.toLowerCase().includes(query)
       );
     }
@@ -217,6 +243,37 @@ export class RankingService {
     }
 
     return filtered;
+  }
+
+  /**
+   * Filter out excessive study durations for public view
+   * Removes entries with study time > max displayable duration
+   * and recalculates ranks starting from 1
+   */
+  static filterForPublicView(rankings: IRankingEntry[]): IRankingEntry[] {
+    const filtered = this.filterRankings(rankings, {
+      maxDuration: RANKING.MAX_DISPLAYABLE_DURATION,
+    });
+    
+    // Recalculate ranks starting from 1
+    // Convert to plain objects to avoid Mongoose document issues
+    const result = filtered.map((entry, index) => {
+      // Handle Mongoose documents by accessing the plain object
+      const plainEntry = (entry as any).toObject ? (entry as any).toObject() : entry;
+      
+      return {
+        rank: index + 1,
+        fullName: this.formatNameToTitleCase(plainEntry.fullName),
+        firstName: this.formatNameToTitleCase(plainEntry.firstName),
+        lastName: this.formatNameToTitleCase(plainEntry.lastName),
+        email: plainEntry.email,
+        totalDuration: plainEntry.totalDuration,
+        totalDurationFormatted: plainEntry.totalDurationFormatted,
+        sessionCount: plainEntry.sessionCount,
+      };
+    });
+    
+    return result;
   }
 
   /**
