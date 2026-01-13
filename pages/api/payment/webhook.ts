@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import connectDB from '@/lib/mongodb';
 import Payment, { PaymentStatus } from '@/models/Payment';
 import { apiResponse, apiError } from '@/utils/response';
-import { createOrUpdateUserFromPayment } from '@/services/user-payment.service';
 import { sendPaymentConfirmationWhatsApp } from '@/services/whatsapp.service';
 
 /**
@@ -113,16 +112,6 @@ async function handlePaymentCaptured(paymentEntity: any) {
     payment.paidAt = new Date(paymentEntity.created_at * 1000);
     await payment.save();
 
-    // Create or update user with premium status
-    await createOrUpdateUserFromPayment({
-      email: payment.email,
-      name: payment.name,
-      phone: payment.phone,
-      examType: payment.examType,
-      isPaymentSuccessful: true,
-      paymentId: payment._id, // Link payment to user
-    });
-
     // Send WhatsApp confirmation (non-blocking)
     sendPaymentConfirmationWhatsApp({
       name: payment.name,
@@ -166,16 +155,6 @@ async function handleOrderPaid(orderEntity: any) {
     payment.status = PaymentStatus.SUCCESS;
     payment.paidAt = new Date();
     await payment.save();
-
-    // Create or update user with premium status
-    await createOrUpdateUserFromPayment({
-      email: payment.email,
-      name: payment.name,
-      phone: payment.phone,
-      examType: payment.examType,
-      isPaymentSuccessful: true,
-      paymentId: payment._id, // Link payment to user
-    });
 
     // Send WhatsApp confirmation (non-blocking)
     sendPaymentConfirmationWhatsApp({
