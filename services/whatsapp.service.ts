@@ -24,6 +24,13 @@ interface WhatsAppResponse {
   error?: string;
 }
 
+interface OTPDetails {
+  phone: string;
+  otp: string;
+  name?: string;
+  expiryMinutes?: number;
+}
+
 /**
  * Send payment confirmation via WhatsApp
  */
@@ -139,10 +146,9 @@ async function sendViaTwilioTemplate(
           ContentSid: templateSid,
           ContentVariables: JSON.stringify({
             '1': details.name,
-            '2': `₹${amount}`,
+            '2': `Rs ${amount}`,
             '3': details.orderId,
-            '4': details.email,
-            '5': guideLink,
+            '4': guideLink,
           }),
         }),
       }
@@ -427,5 +433,153 @@ Happy Studying! 📚💪`;
     console.error('❌ Welcome WhatsApp failed:', error.message);
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Send OTP via WhatsApp
+ */
+export async function sendOTPWhatsApp(details: OTPDetails): Promise<WhatsAppResponse> {
+  const provider = process.env.WHATSAPP_PROVIDER || 'twilio';
+  const useTemplate = process.env.TWILIO_USE_OTP_TEMPLATE === 'true';
+  const templateSid = process.env.TWILIO_OTP_TEMPLATE_SID;
+
+  console.log(`📱 Sending OTP via WhatsApp (${provider})...`);
+
+  try {
+    if (provider === 'twilio') {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+
+      if (!accountSid || !authToken || !fromNumber) {
+        console.warn('Twilio not configured. Cannot send OTP.');
+        return { success: false, error: 'Twilio not configured' };
+      }
+
+      const toNumber = formatPhoneForWhatsApp(details.phone);
+
+      // Use template if configured
+      if (useTemplate && templateSid) {
+        return await sendOTPViaTwilioTemplate(
+          details,
+          accountSid,
+          authToken,
+          fromNumber,
+          toNumber,
+          templateSid
+        );
+      }
+
+      // Otherwise send plain text
+      const message = generateOTPMessage(details);
+
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+          },
+          body: new URLSearchParams({
+            From: fromNumber,
+            To: `whatsapp:${toNumber}`,
+            Body: message,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log('✅ OTP sent via Twilio WhatsApp:', data.sid);
+        return { success: true, messageId: data.sid };
+      } else {
+        console.error('❌ Twilio OTP error:', data.message);
+        return { success: false, error: data.message };
+      }
+    }
+
+    return { success: false, error: 'Provider not supported for OTP' };
+  } catch (error: any) {
+    console.error('❌ WhatsApp OTP failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send OTP via Twilio Template (for approved templates)
+ * Note: WhatsApp Authentication templates have a special format
+ */
+async function sendOTPViaTwilioTemplate(
+  details: OTPDetails,
+  accountSid: string,
+  authToken: string,
+  fromNumber: string,
+  toNumber: string,
+  templateSid: string
+): Promise<WhatsAppResponse> {
+  try {
+    // For WhatsApp Authentication templates, we only need the OTP code
+    // The template automatically includes security message and copy button
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+        },
+        body: new URLSearchParams({
+          From: fromNumber,
+          To: `whatsapp:${toNumber}`,
+          ContentSid: templateSid,
+          ContentVariables: JSON.stringify({
+            '1': details.otp, // The OTP code - authentication templates expect just this
+          }),
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log('✅ OTP sent via Twilio Authentication Template:', data.sid);
+      return { success: true, messageId: data.sid };
+    } else {
+      console.error('❌ Twilio OTP template error:', data.message);
+      return { success: false, error: data.message };
+    }
+  } catch (error: any) {
+    console.error('❌ Twilio OTP template failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Generate OTP message (plain text)
+ */
+function generateOTPMessage(details: OTPDetails): string {
+  const expiryMinutes = details.expiryMinutes || 5;
+  const greeting = details.name ? `Hi ${details.name}` : 'Hi there';
+
+  return `🔐 *Virtual Library - Login OTP*
+
+${greeting}!
+
+Your OTP for logging into Virtual Library is:
+
+*${details.otp}*
+
+⏱️ Valid for ${expiryMinutes} minutes
+
+⚠️ *Security Tips:*
+• Do NOT share this OTP with anyone
+• Virtual Library will NEVER ask for your OTP
+• If you didn't request this, please ignore
+
+Need help? Contact support@virtuallibrary.in
+
+Virtual Library Team 📚`;
 }
 
