@@ -59,6 +59,8 @@ async function sendViaTwilio(details: PaymentDetails): Promise<WhatsAppResponse>
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER; // Format: whatsapp:+14155238886
+  const useTemplate = process.env.TWILIO_USE_TEMPLATE === 'true';
+  const templateSid = process.env.TWILIO_WHATSAPP_TEMPLATE_SID;
 
   if (!accountSid || !authToken || !fromNumber) {
     console.warn('Twilio credentials not configured. Skipping WhatsApp notification.');
@@ -67,9 +69,16 @@ async function sendViaTwilio(details: PaymentDetails): Promise<WhatsAppResponse>
 
   // Format phone number for WhatsApp (must include country code)
   const toNumber = formatPhoneForWhatsApp(details.phone);
-  const message = generatePaymentMessage(details);
 
   try {
+    // Use Twilio Content Template if configured and approved
+    if (useTemplate && templateSid) {
+      return await sendViaTwilioTemplate(details, accountSid, authToken, fromNumber, toNumber, templateSid);
+    }
+
+    // Otherwise, send plain text message
+    const message = generatePaymentMessage(details);
+
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
       {
@@ -97,6 +106,59 @@ async function sendViaTwilio(details: PaymentDetails): Promise<WhatsAppResponse>
     }
   } catch (error: any) {
     console.error('❌ Twilio request failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send via Twilio using Content Template (for approved templates)
+ */
+async function sendViaTwilioTemplate(
+  details: PaymentDetails,
+  accountSid: string,
+  authToken: string,
+  fromNumber: string,
+  toNumber: string,
+  templateSid: string
+): Promise<WhatsAppResponse> {
+  const amount = (details.amount / 100).toFixed(2);
+  const guideLink = 'https://docs.google.com/document/d/17bsjBt0nuiW7dRSdkCwXC1SHUQBZDt-sGfIYvooNFZ0/edit?usp=drivesdk';
+
+  try {
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+        },
+        body: new URLSearchParams({
+          From: fromNumber,
+          To: `whatsapp:${toNumber}`,
+          ContentSid: templateSid,
+          ContentVariables: JSON.stringify({
+            '1': details.name,
+            '2': `₹${amount}`,
+            '3': details.orderId,
+            '4': details.email,
+            '5': guideLink,
+          }),
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log('✅ WhatsApp sent via Twilio Template:', data.sid);
+      return { success: true, messageId: data.sid };
+    } else {
+      console.error('❌ Twilio template error:', data.message);
+      return { success: false, error: data.message };
+    }
+  } catch (error: any) {
+    console.error('❌ Twilio template request failed:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -249,32 +311,41 @@ function formatPhoneForWhatsApp(phone: string): string {
  */
 function generatePaymentMessage(details: PaymentDetails): string {
   const amount = (details.amount / 100).toFixed(2);
+  const guideLink = 'https://docs.google.com/document/d/17bsjBt0nuiW7dRSdkCwXC1SHUQBZDt-sGfIYvooNFZ0/edit?usp=drivesdk';
   
-  return `🎉 *Payment Successful!*
+  return `🎉 *Payment Successful - Virtual Library*
 
 Hi ${details.name},
 
-Thank you for your payment! Your transaction has been completed successfully.
+Thank you for purchasing Virtual Library subscription! 🎓
 
 *Payment Details:*
 💰 Amount: ₹${amount}
 📝 Order ID: ${details.orderId}
 ${details.paymentId ? `🔑 Payment ID: ${details.paymentId}` : ''}
-📧 Email: ${details.email}
 
-${details.isPremium ? `
-🌟 *You are now a PREMIUM member!*
-✅ Access to all premium features
-✅ Valid for 1 year
+${details.isPremium ? `🌟 *You are now a PREMIUM member!*
+
+📚 *Get Started Guide:*
+${guideLink}
+
+*Your Premium Benefits:*
 ✅ 24/7 Virtual Study Space
-` : ''}
+✅ Expert-Led Mental Health Sessions
+✅ Forest Study Groups
+✅ Priority Support
+✅ Valid for 1 year
 
+Need help? Reply to this message anytime!
+
+Welcome to Virtual Library! ✨` : `
 You can now login at: https://virtuallibrary.in
 Use your email (${details.email}) to login via OTP.
 
-Need help? Reply to this message or contact us at support@virtuallibrary.in
+📚 *Get Started:*
+${guideLink}
 
-Welcome to Virtual Library! 📚✨`;
+Need help? Reply to this message or contact support@virtuallibrary.in`}`;
 }
 
 /**
