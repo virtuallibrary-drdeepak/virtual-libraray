@@ -140,6 +140,7 @@ async function handlePaymentFailed(paymentEntity: any) {
     payment.razorpayPaymentId = paymentEntity.id;
     payment.failureReason = paymentEntity.error_description || 'Payment failed';
     await payment.save();
+
   }
 }
 
