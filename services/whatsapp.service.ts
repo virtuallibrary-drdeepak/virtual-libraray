@@ -129,7 +129,6 @@ async function sendViaTwilioTemplate(
   templateSid: string
 ): Promise<WhatsAppResponse> {
   const amount = (details.amount / 100).toFixed(2);
-  const guideLink = 'https://docs.google.com/document/d/17bsjBt0nuiW7dRSdkCwXC1SHUQBZDt-sGfIYvooNFZ0/edit?usp=drivesdk';
 
   try {
     const response = await fetch(
@@ -148,7 +147,6 @@ async function sendViaTwilioTemplate(
             '1': details.name,
             '2': `Rs ${amount}`,
             '3': details.orderId,
-            '4': guideLink,
           }),
         }),
       }
@@ -317,41 +315,36 @@ function formatPhoneForWhatsApp(phone: string): string {
  */
 function generatePaymentMessage(details: PaymentDetails): string {
   const amount = (details.amount / 100).toFixed(2);
-  const guideLink = 'https://docs.google.com/document/d/17bsjBt0nuiW7dRSdkCwXC1SHUQBZDt-sGfIYvooNFZ0/edit?usp=drivesdk';
   
-  return `🎉 *Payment Successful - Virtual Library*
+  return `Hi ${details.name}
 
-Hi ${details.name},
+Thank you for purchasing the Virtual Library - Premium Subscription
 
-Thank you for purchasing Virtual Library subscription! 🎓
+We're excited to have you with us!
 
-*Payment Details:*
-💰 Amount: ₹${amount}
-📝 Order ID: ${details.orderId}
-${details.paymentId ? `🔑 Payment ID: ${details.paymentId}` : ''}
+Payment Details
+- Amount Paid: Rs ${amount}
+- Order ID: ${details.orderId}
+${details.paymentId ? `- Payment ID: ${details.paymentId}` : ''}
 
-${details.isPremium ? `🌟 *You are now a PREMIUM member!*
+Your Premium access is now activated and will be valid till NEET-PG 2026.
 
-📚 *Get Started Guide:*
-${guideLink}
+Next Step (Mandatory Verification)
 
-*Your Premium Benefits:*
-✅ 24/7 Virtual Study Space
-✅ Expert-Led Mental Health Sessions
-✅ Forest Study Groups
-✅ Priority Support
-✅ Valid for 1 year
+To join the Virtual Library WhatsApp and Telegram community, please share a screenshot of this payment confirmation on WhatsApp at +91 79744 25107.
 
-Need help? Reply to this message anytime!
+Click here to send the screenshot:
+https://wa.me/message/4VIR5FOQSNPVD1
 
-Welcome to Virtual Library! ✨` : `
-You can now login at: https://virtuallibrary.in
-Use your email (${details.email}) to login via OTP.
+Once verified, you'll receive the complete Virtual Library joining details shortly.
 
-📚 *Get Started:*
-${guideLink}
+Need any help?
+Our team is always happy to assist you.
+Just message us on WhatsApp at +91 79744 25107.
 
-Need help? Reply to this message or contact support@virtuallibrary.in`}`;
+Welcome to the Virtual Library - let's crack NEET-PG together!
+
+Team Virtual Library`;
 }
 
 /**
