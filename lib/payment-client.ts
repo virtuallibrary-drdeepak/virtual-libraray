@@ -26,6 +26,42 @@ export type BillingPlansResponse = {
   message?: string
 }
 
+export type PublicBillingPlansResponse = {
+  plans: BillingPlan[]
+  course: CourseSummary | null
+  code?: string
+  message?: string
+}
+
+export type BillingPricing = {
+  baseAmountPaise: number
+  discountAmountPaise: number
+  finalAmountPaise: number
+  currency: string
+}
+
+export type BillingCoupon = {
+  couponId: string | null
+  code: string
+  name?: string | null
+  description?: string | null
+  discountType?: string
+  discountValue?: number
+  maxDiscountPaise?: number | null
+}
+
+export type BillingQuoteResponse = {
+  couponStatus: 'NONE' | 'APPLIED' | 'INVALID' | string
+  isValidCoupon: boolean
+  pricing: BillingPricing
+  coupon: BillingCoupon | null
+  code?: string
+  message?: string
+  plan?: BillingPlan
+  course?: CourseSummary
+  selectedCourse?: CourseSummary | null
+}
+
 export type CourseOptionsResponse = {
   courses: CourseSummary[]
   customCourseOption?: {
@@ -41,6 +77,10 @@ export type BillingOrderResponse = {
   amount: number
   currency: string
   keyId: string
+  paymentLink?: string
+  paymentUrl?: string
+  checkoutUrl?: string
+  shortUrl?: string
   order: {
     id: string
     status: string
@@ -55,6 +95,10 @@ export type BillingOrderResponse = {
     orderId: string
     amountPaise: number
     currency: string
+    paymentLink?: string
+    paymentUrl?: string
+    checkoutUrl?: string
+    shortUrl?: string
   }
   plan: {
     planId: string
@@ -70,6 +114,8 @@ export type BillingOrderResponse = {
     title: string
     description: string | null
   }
+  pricing?: BillingPricing
+  coupon?: BillingCoupon | null
   user?: {
     name?: string
     email?: string
@@ -85,6 +131,70 @@ export type BillingVerifyResponse = {
   returnUrl?: string
   accessGranted?: boolean
   message?: string
+}
+
+export type PaymentLinkCreateResponse = {
+  ok: boolean
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | string
+  paymentUrl: string
+  checkout?: {
+    claimToken?: string
+    accountSetupRequired?: boolean
+  }
+  paymentLink?: {
+    id?: string
+    shortUrl?: string
+    short_url?: string
+    status?: string
+  }
+  order: {
+    id: string
+    status: string
+    receipt?: string
+    amountPaise: number
+    currency: string
+    providerOrderId?: string
+    createdAt?: string
+  }
+  pricing?: BillingPricing
+  coupon?: BillingCoupon | null
+  customer?: {
+    phoneE164Masked?: string
+    email?: string
+    name?: string
+    accountExists?: boolean
+  }
+}
+
+export type PaymentLinkStatusResponse = {
+  ok: boolean
+  status: 'COMPLETED' | 'PENDING' | 'FAILED' | 'ACCOUNT_SETUP_REQUIRED' | string
+  paymentStatus?: string
+  accountSetupRequired?: boolean
+  accessGranted?: boolean
+  message?: string
+  order?: {
+    id: string
+    status: string
+    providerOrderId?: string
+    providerPaymentId?: string
+    paidAt?: string
+    accessGrantedAt?: string
+  }
+}
+
+export type CheckoutOtpVerifyResponse = {
+  accessToken?: string
+  refreshToken?: string
+  isNewUser?: boolean
+  accountReady?: boolean
+  subscription?: {
+    status?: string
+    requiresCourseSelection?: boolean
+    shouldPromptSubscribe?: boolean
+  }
+  order?: PaymentLinkStatusResponse['order']
+  courseAccess?: any
 }
 
 export class PaymentApiError extends Error {
@@ -159,17 +269,22 @@ export const tokenStore = {
   },
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}) {
+export type ApiFetchInit = RequestInit & {
+  skipAuth?: boolean
+}
+
+export async function apiFetch<T>(path: string, init: ApiFetchInit = {}) {
   return apiFetchInternal<T>(path, init, true)
 }
 
-async function apiFetchInternal<T>(path: string, init: RequestInit = {}, allowRefresh = true) {
-  const accessToken = tokenStore.getAccessToken()
+async function apiFetchInternal<T>(path: string, init: ApiFetchInit = {}, allowRefresh = true) {
+  const { skipAuth, ...fetchInit } = init
+  const accessToken = skipAuth ? null : tokenStore.getAccessToken()
   const headers: Record<string, string> = {
-    ...(init.headers as Record<string, string> | undefined),
+    ...(fetchInit.headers as Record<string, string> | undefined),
   }
 
-  if (!headers['Content-Type'] && init.body) {
+  if (!headers['Content-Type'] && fetchInit.body) {
     headers['Content-Type'] = 'application/json'
   }
 
@@ -178,7 +293,7 @@ async function apiFetchInternal<T>(path: string, init: RequestInit = {}, allowRe
   }
 
   const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
+    ...fetchInit,
     headers,
     credentials: 'include',
   })
@@ -186,7 +301,7 @@ async function apiFetchInternal<T>(path: string, init: RequestInit = {}, allowRe
   const rawBody = await response.text()
   const body = tryParseJson(rawBody)
 
-  if (response.status === 401 && allowRefresh && tokenStore.getRefreshToken()) {
+  if (response.status === 401 && allowRefresh && !skipAuth && tokenStore.getRefreshToken()) {
     const refreshed = await refreshAccessToken()
 
     if (refreshed) {
