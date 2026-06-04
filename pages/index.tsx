@@ -53,7 +53,6 @@ type Feature = {
 type Audience = {
   icon: IconName
   title: string
-  description?: string
   tone: string
   iconTone: string
 }
@@ -98,19 +97,9 @@ const FEATURES: Feature[] = [
     description: 'Expert led sessions to help students manage stress, burnout, anxiety, and exam pressure.',
   },
   {
-    icon: 'graduation',
-    title: 'Live Mentorship Sessions',
-    description: 'Regular strategy sessions by toppers and seniors for planning, revision, and consistency.',
-  },
-  {
     icon: 'chart',
     title: 'Revision Tracker',
     description: 'Spaced repetition system with customizable reminders.',
-  },
-  {
-    icon: 'users',
-    title: 'Find Study Buddy',
-    description: 'Connect with a study partner who matches your exam, schedule, and preparation rhythm.',
   },
   {
     icon: 'users',
@@ -121,11 +110,6 @@ const FEATURES: Feature[] = [
     icon: 'leaf',
     title: 'Daily Meditation & Yoga Sessions',
     description: '30 min. Morning and evening sessions to improve focus, reduce stress, and boost mental clarity.',
-  },
-  {
-    icon: 'clock',
-    title: 'Early Bird & Night Owl Groups',
-    description: 'Dedicated groups for early morning and late-night learners who need schedule-based accountability.',
   },
   {
     icon: 'target',
@@ -162,45 +146,61 @@ const AUDIENCES: Audience[] = [
   {
     icon: 'stethoscope',
     title: 'NEET PG aspirants',
-    description: 'Preparing for NEET PG 2027, 2028 & 2029',
     tone: 'bg-[#fff4df]',
     iconTone: 'text-[#6d35df]',
   },
   {
     icon: 'graduation',
-    title: 'INI-CET Aspirants',
+    title: 'MBBS & College Students',
     tone: 'bg-[#e7fae7]',
     iconTone: 'text-[#6d35df]',
   },
   {
     icon: 'microscope',
-    title: 'FMGE Aspirants',
+    title: 'NEET SS / NEET MDS aspirants',
     tone: 'bg-[#fff2e3]',
     iconTone: 'text-[#6d35df]',
   },
   {
     icon: 'landmark',
-    title: 'MBBS Students',
-    description: '1st Year to Internship',
+    title: 'UPSC CSE aspirants',
     tone: 'bg-[#e8ddff]',
     iconTone: 'text-[#6d35df]',
   },
   {
     icon: 'flask',
-    title: 'USMLE & PLAB Aspirants',
+    title: 'NEET UG / IIT-JEE students',
     tone: 'bg-[#fbffc9]',
     iconTone: 'text-[#6d35df]',
   },
   {
-    icon: 'hospital',
-    title: 'NEET MDS Aspirants',
+    icon: 'train',
+    title: 'SSC / Railway exam aspirants',
     tone: 'bg-[#e1e1e1]',
     iconTone: 'text-[#6d35df]',
   },
   {
     icon: 'heart',
-    title: 'NEET SS Aspirants',
+    title: 'NORCET & Nursing exam aspirants',
     tone: 'bg-[#fff3df]',
+    iconTone: 'text-[#6d35df]',
+  },
+  {
+    icon: 'building',
+    title: 'State PSC aspirants',
+    tone: 'bg-[#e6fae8]',
+    iconTone: 'text-[#6d35df]',
+  },
+  {
+    icon: 'bank',
+    title: 'All Banking exams',
+    tone: 'bg-[#fff2e3]',
+    iconTone: 'text-[#6d35df]',
+  },
+  {
+    icon: 'briefcase',
+    title: 'Working professionals',
+    tone: 'bg-[#e5dcff]',
     iconTone: 'text-[#6d35df]',
   },
 ]
@@ -289,114 +289,6 @@ const TESTIMONIALS = [
     metric: 'Top 5% weekly',
     icon: 'chart' as IconName,
     badgeTone: 'border-[#8ce7bd] bg-[#effff7] text-[#079669]',
-  },
-]
-
-const HOME_FAQS = [
-  {
-    question: 'What is Virtual Library?',
-    answer: [
-      'A self-study and accountability platform designed to help aspirants stay consistent, focused, and motivated.',
-    ],
-  },
-  {
-    question: 'How do I start using the Virtual Library app?',
-    answer: [
-      "Select a plan, complete your subscription, download the app, and log in using the same details you used during payment. That's it - you'll be ready to start studying.",
-    ],
-  },
-  {
-    question: 'Who can join?',
-    answer: [
-      'Anyone can join, including NEET PG, INI-CET, FMGE, USMLE, PLAB, NEET MDS, NEET SS aspirants, and MBBS students.',
-    ],
-  },
-  {
-    question: 'How do the 24x7 Study Rooms work?',
-    answer: [
-      'You can join live study rooms anytime and study alongside serious aspirants from across India in a focused, productive environment.',
-    ],
-  },
-  {
-    question: 'What are Daily Rankings?',
-    answer: [
-      'Daily rankings are leaderboards based on study hours and consistency. They help you stay accountable and make progress visible.',
-    ],
-  },
-  {
-    question: 'How does the App Blocker work?',
-    answer: [
-      "Virtual Library's Focus Mode blocks distracting apps during study sessions so you can study without interruptions.",
-      'Solo Focus Mode: Create your own study session, such as 2 hours. Once the session starts, selected distracting apps remain blocked until the session ends.',
-      'Group Focus Mode: Create a focus room and share the code with friends or your study group. Anyone who joins the room will have distracting apps blocked for the duration of the session, helping everyone stay accountable together.',
-    ],
-  },
-  {
-    question: 'Can I use coaching apps or classes during Focus Mode?',
-    answer: [
-      'Yes. Before starting a session, you can add coaching apps and other study resources to your Allow List so they remain accessible during Focus Mode.',
-    ],
-  },
-  {
-    question: 'Is it compulsory to turn the camera on?',
-    answer: [
-      'No. Keeping your camera on is completely optional.',
-      'However, many members choose to keep their cameras on as it helps improve accountability, reduce distractions, and create a more library-like study environment.',
-    ],
-  },
-  {
-    question: 'What is the Revision Tracker?',
-    answer: [
-      'Revision Tracker is a smart revision system with spaced repetition reminders to help you retain concepts and revise on time.',
-    ],
-  },
-  {
-    question: 'What are Mentorship Sessions?',
-    answer: [
-      'Mentorship Sessions are regular sessions by toppers and seniors covering study strategy, revision planning, time management, and consistency.',
-    ],
-  },
-  {
-    question: 'What are Mental Health Sessions?',
-    answer: [
-      'Mental Health Sessions are conducted by psychiatrists to help manage stress, burnout, anxiety, motivation, and overall well-being during preparation.',
-    ],
-  },
-  {
-    question: 'Is there a Girls-Only Community?',
-    answer: [
-      'Yes. Dedicated study rooms and groups are available for female aspirants.',
-    ],
-  },
-  {
-    question: 'How do I join the WhatsApp and Telegram communities?',
-    answer: [
-      'After subscribing, you will receive all the necessary instructions and links to join the Virtual Library WhatsApp and Telegram communities.',
-    ],
-  },
-  {
-    question: 'Is Virtual Library a coaching platform?',
-    answer: [
-      'No. Virtual Library is a self-study ecosystem and does not provide lectures, courses, or study material.',
-    ],
-  },
-  {
-    question: 'Can I try Virtual Library before purchasing?',
-    answer: [
-      'Yes. You can explore the free features of the app before deciding to subscribe.',
-    ],
-  },
-  {
-    question: 'Can Virtual Library guarantee a rank?',
-    answer: [
-      'No. However, it helps improve consistency, focus, accountability, and study discipline - key factors for exam success.',
-    ],
-  },
-  {
-    question: 'Why should I join Virtual Library?',
-    answer: [
-      'Because staying consistent is easier when you have accountability, community support, focus tools, mentorship, mental health support, and a structured study environment - all in one place.',
-    ],
   },
 ]
 
@@ -553,7 +445,6 @@ export default function Home() {
           />
           <StepsSection />
           <TestimonialsSection />
-          <HomeFaqSection />
           <FinalCta />
         </main>
         <SiteFooter />
@@ -1259,103 +1150,6 @@ function TestimonialsSection() {
               </span>
               86% students improve consistency in 21 days
             </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function HomeFaqSection() {
-  const initialFaqCount = 8
-  const [expandedFaq, setExpandedFaq] = useState(0)
-  const [showAllFaqs, setShowAllFaqs] = useState(false)
-  const visibleFaqs = showAllFaqs ? HOME_FAQS : HOME_FAQS.slice(0, initialFaqCount)
-
-  return (
-    <section
-      id="faq"
-      className="relative overflow-hidden bg-white px-4 py-12 scroll-mt-24 sm:px-6 sm:py-20"
-    >
-      <div className="pointer-events-none absolute left-1/2 top-0 h-44 w-[32rem] -translate-x-1/2 rounded-full bg-[#8b5cf6]/8 blur-3xl" />
-      <div className="relative mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:items-start lg:gap-12">
-        <div className="lg:sticky lg:top-28">
-          <p className="inline-flex h-8 items-center justify-center rounded-[13px] bg-[#e5dcff] px-4 text-xs font-bold uppercase tracking-normal text-[#6d35df] shadow-[0_12px_28px_rgba(109,53,223,0.10)] ring-1 ring-white/70">
-            FAQs
-          </p>
-          <h2 className="mt-4 max-w-xl text-[2rem] font-extrabold leading-tight tracking-normal text-[#090713] sm:text-4xl lg:text-[2.65rem]">
-            Questions before you start?
-          </h2>
-          <p className="mt-4 max-w-md text-base font-medium leading-7 text-[#7f7898] sm:text-lg">
-            A short guide to how Virtual Library works, what you get, and how to begin studying after subscribing.
-          </p>
-        </div>
-
-        <div className="rounded-[26px] border border-[#e4dcf4] bg-[#fbfaff] p-2 shadow-[0_22px_70px_rgba(48,32,88,0.08)] sm:p-3">
-          <div className="space-y-2">
-            {visibleFaqs.map((faq, index) => {
-              const isExpanded = expandedFaq === index
-
-              return (
-                <article
-                  key={faq.question}
-                  className={`overflow-hidden rounded-[20px] border bg-white transition duration-300 ${isExpanded
-                    ? 'border-[#8b5cf6]/55 shadow-[0_16px_42px_rgba(82,48,170,0.11)]'
-                    : 'border-[#ede7f8] shadow-[0_8px_24px_rgba(48,32,88,0.04)] hover:border-[#d9ccfb]'
-                    }`}
-                >
-                  <button
-                    type="button"
-                    aria-expanded={isExpanded}
-                    onClick={() => setExpandedFaq(isExpanded ? -1 : index)}
-                    className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left sm:px-5"
-                  >
-                    <span className="text-[0.98rem] font-bold leading-6 text-[#171322] sm:text-base">
-                      {faq.question}
-                    </span>
-                    <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition duration-300 ${isExpanded
-                        ? 'border-[#7c3aed] bg-[#7c3aed] text-white'
-                        : 'border-[#e5dcff] bg-[#f7f3ff] text-[#6d35df]'
-                        }`}
-                    >
-                      <ChevronDownIcon
-                        className={`h-4 w-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </span>
-                  </button>
-
-                  <div
-                    className={`grid transition-all duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="space-y-3 px-4 pb-5 pt-0 text-sm font-medium leading-6 text-[#6f6a80] sm:px-5 sm:text-[0.95rem]">
-                        {faq.answer.map((paragraph) => (
-                          <p key={paragraph}>{paragraph}</p>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-
-          <div className="mt-3 border-t border-[#ece5f8] px-1 pt-3">
-            <button
-              type="button"
-              onClick={() => {
-                setShowAllFaqs((current) => !current)
-                setExpandedFaq(0)
-              }}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[16px] bg-[#171322] px-5 text-sm font-bold text-white shadow-[0_16px_34px_rgba(23,19,34,0.12)] transition hover:-translate-y-0.5 hover:bg-[#2b2242] sm:w-auto sm:bg-[#7c3aed] sm:hover:bg-[#6d35df]"
-            >
-              {showAllFaqs ? 'Show fewer FAQs' : `Read more FAQs (${HOME_FAQS.length - initialFaqCount})`}
-              <ChevronDownIcon
-                className={`h-4 w-4 transition-transform duration-300 ${showAllFaqs ? 'rotate-180' : ''}`}
-              />
-            </button>
           </div>
         </div>
       </div>
