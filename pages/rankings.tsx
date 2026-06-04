@@ -86,7 +86,7 @@ class RankingRequestError extends Error {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const APP_RANKING_LIMIT = 20;
-const EVENT_API_BASE = 'http://localhost:4001';
+const EVENT_API_BASE = 'https://event.virtuallibrary.in';
 
 const APP_PERIODS: Array<{ value: AppLeaderboardPeriod; label: string }> = [
   { value: 'daily', label: 'Daily' },
