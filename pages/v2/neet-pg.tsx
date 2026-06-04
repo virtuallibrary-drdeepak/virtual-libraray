@@ -1,167 +1,135 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   apiFetch,
   BillingPlan,
+  formatCurrency,
   PublicBillingPlansResponse,
 } from '@/lib/payment-client'
-import {
-  getPricingPlanMeta,
-  PricingPlanCard,
-  sortPricingPlans,
-} from '@/components/v2/PricingPlanCard'
+import { sortPricingPlans } from '@/components/v2/PricingPlanCard'
 
 const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
 const APP_STORE_HREF = 'https://apps.apple.com/'
+const HERO_IMAGE = '/img/v2/hero-section-illustration.png'
+const STUDY_ROOM_IMAGE = '/img/banner-right.png'
+const COMMUNITY_IMAGE = '/img/Explore-Communities.jpg'
 
-type FeatureSection = {
+type Feature = {
   title: string
-  subtitle: string
+  eyebrow: string
   description: string
-  cta: string
-  image: string
-  alt: string
-  reverse?: boolean
+  icon: 'room' | 'focus' | 'revision' | 'analytics'
 }
-type MoreFeature = {
-  title: string
-  description: string
-  tone: string
-  icon: 'rankings' | 'support' | 'communities' | 'progress'
+
+type Testimonial = {
+  quote: string
+  name: string
+  role: string
+  initials: string
 }
-type HeroStat = {
-  value: string
-  label: string
-  suffix?: string
-  accent?: boolean
-  leadingDot?: boolean
-}
+
 const NAV_ITEMS = [
-  { label: 'Features', id: 'features' },
-  { label: 'Plans', id: 'pricing' },
-  { label: 'Why Us', id: 'why-virtual-library' },
-  { label: '3 Steps', id: 'steps' },
+  { label: 'Product', id: 'product' },
+  { label: 'Routine', id: 'routine' },
+  { label: 'Plans', id: 'plans' },
+  { label: 'Reviews', id: 'reviews' },
 ]
 
-const HERO_COPY = {
-  title: 'Struggling To Stay Consistent With Your Studies From Home?',
-  description:
-    'Join Virtual Library where 3000+ students show up every day, keep each other accountable, and stay focused with 24/7 live study rooms, focus mode app blocker, and many more.',
-  image: '/img/v2/hero-section-illustration.png',
-  alt: 'Virtual Library app preview showing live study room and practice notes',
-}
-
-const HERO_STATS: HeroStat[] = [
-  { value: '2.5K', suffix: '+', label: 'App Downloads' },
-  { value: '70%', label: 'Female Members' },
-  { value: '3000+', label: 'Aspirants study daily' },
-  { value: '825+', label: 'Focusing right now', accent: true, leadingDot: true },
+const HERO_STATS = [
+  { value: '24/7', label: 'Study rooms' },
+  { value: '3000+', label: 'Daily learners' },
+  { value: '825+', label: 'Focusing now' },
+  { value: '70%', label: 'Women learners' },
 ]
 
-const FEATURE_SECTIONS: FeatureSection[] = [
+const FEATURES: Feature[] = [
   {
-    title: 'Virtual Study Rooms',
-    subtitle: '24-Hour Active Zoom Study Sessions.',
+    title: 'Live study presence',
+    eyebrow: 'Accountability',
     description:
-      'Study anytime with dedicated learners in our always-active Zoom sessions. Build consistency, stay accountable, and achieve more alongside like-minded students.',
-    cta: 'Join Study Room',
-    image: '/img/v2/Studying-rafiki.svg',
-    alt: 'Student using Virtual Library study room',
+      'Join active rooms throughout the day, see other learners studying, and make showing up feel natural.',
+    icon: 'room',
   },
   {
-    title: 'Focus Zone',
-    subtitle: 'Block distractions and study with attention.',
+    title: 'Distraction control',
+    eyebrow: 'Focus',
     description:
-      'Built-in timer with deep focus mode. Automatically block social media apps while you study and keep your prep anchored to real study hours.',
-    cta: 'Try Deep Focus Mode',
-    image: '/img/v2/Time management-amico.svg',
-    alt: 'Focus mode illustration',
-    reverse: true,
+      'Use focus mode, timers, and blocker-friendly routines to protect deep work sessions from interruptions.',
+    icon: 'focus',
   },
   {
-    title: 'Revision Tracker (Spaced Repetition)',
-    subtitle: 'Revise on time, remember for longer.',
+    title: 'Revision rhythm',
+    eyebrow: 'Retention',
     description:
-      'Track what you studied today, get customizable reminders automatically, and revise smarter with spaced repetition built for long-term retention.',
-    cta: 'Save A Note',
-    image: '/img/v2/Mobile note list-pana.svg',
-    alt: 'Revision tracker illustration',
+      'Keep notes, reminders, and review blocks in one place so your routine compounds across weeks.',
+    icon: 'revision',
+  },
+  {
+    title: 'Progress visibility',
+    eyebrow: 'Analytics',
+    description:
+      'Track study hours, streaks, and consistency without turning your preparation into extra admin work.',
+    icon: 'analytics',
   },
 ]
 
-const MORE_FEATURES: MoreFeature[] = [
+const INCLUDED_FEATURES = [
+  '24/7 live study room access',
+  'Focus tools and session timers',
+  'Revision notes and reminders',
+  'Rankings and progress insights',
+  'Community groups and peer accountability',
+  'Mobile app access after payment',
+]
+
+const ROUTINE_STEPS = [
   {
-    title: 'Rankings',
-    description: 'Compare ranks with others and grow together.',
-    tone: 'bg-[#fff6d8] text-[#d49a00]',
-    icon: 'rankings',
+    title: 'Enter a room',
+    description: 'Start with a live room that matches your study block and keeps you visible.',
   },
   {
-    title: 'Support Sessions',
-    description: 'Expert-led sessions for mental health and support.',
-    tone: 'bg-[#ffe5eb] text-[#e8415d]',
-    icon: 'support',
+    title: 'Protect the block',
+    description: 'Use timers and focus tools to reduce phone drift while you study.',
   },
   {
-    title: 'Communities',
-    description: 'Explore WhatsApp and Telegram communities.',
-    tone: 'bg-[#ddffd0] text-[#34a853]',
-    icon: 'communities',
-  },
-  {
-    title: 'Progress and Goals',
-    description: 'View progress or edit your future goals.',
-    tone: 'bg-[#efecff] text-[#6d5cff]',
-    icon: 'progress',
+    title: 'Review and repeat',
+    description: 'Track the session, save revision cues, and return tomorrow with less friction.',
   },
 ]
 
-const FLOW_STEPS = [
+const TESTIMONIALS: Testimonial[] = [
   {
-    id: '1',
-    title: 'Choose a plan',
-    description:
-      'Pick the subscription duration that matches your prep window.',
+    quote:
+      'The live rooms made consistency visible. I stopped negotiating with myself every morning and just joined.',
+    name: 'Aditi R.',
+    role: 'Competitive exam learner',
+    initials: 'AR',
   },
   {
-    id: '2',
-    title: 'Complete billing',
-    description:
-      'Verify your phone number, add billing details, and continue through Razorpay.',
+    quote:
+      'Focus mode helped me turn short scattered study windows into proper blocks. The routine finally felt stable.',
+    name: 'Rohan M.',
+    role: 'College student',
+    initials: 'RM',
   },
   {
-    id: '3',
-    title: 'Download the app',
-    description:
-      'Download Virtual Library and start using study rooms, focus tools, rankings, and support.',
+    quote:
+      'I liked that every plan had the same tools. I just chose the duration that matched my preparation timeline.',
+    name: 'Samaira K.',
+    role: 'Self-paced aspirant',
+    initials: 'SK',
   },
 ]
-
-const WHO_CAN_JOIN = [
-  'Students preparing for competitive exams',
-  'College students managing daily study routines',
-  'Working professionals studying alongside a job',
-  'Anyone who struggles with consistency, focus, or accountability',
-]
-
-const TESTIMONIAL = {
-  image: '/img/Dr.Deepak_Aanjna.jpeg',
-  name: 'Dr. Deepak Aanjna',
-  quote:
-    'Focus mode changed everything for me. I stopped wasting study blocks and finally built the consistency I needed for serious preparation.',
-  result: '12h 35m',
-  meta: 'Best focus day',
-  pill: 'Focus mode',
-}
 
 export default function V2NeetPgPage() {
   const router = useRouter()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [pricingPlans, setPricingPlans] = useState<BillingPlan[]>([])
   const [pricingLoading, setPricingLoading] = useState(true)
   const [pricingError, setPricingError] = useState('')
+
+  const recommendedPlanId = useMemo(() => getRecommendedPlanId(pricingPlans), [pricingPlans])
 
   useEffect(() => {
     let isMounted = true
@@ -232,7 +200,7 @@ export default function V2NeetPgPage() {
       .finally(() => setPricingLoading(false))
   }
 
-  function scrollToSection(sectionId: string, offset = 96) {
+  function scrollToSection(sectionId: string, offset = 76) {
     if (typeof window === 'undefined') {
       return
     }
@@ -250,602 +218,494 @@ export default function V2NeetPgPage() {
     })
   }
 
-  function openSection(sectionId: string, offset = 96) {
-    setMobileMenuOpen(false)
-    scrollToSection(sectionId, offset)
-  }
-
   return (
     <>
       <Head>
-        <title>Study From Home - Virtual Library</title>
+        <title>Virtual Library - Study Rooms and Focus Tools</title>
         <meta
           name="description"
-          content="A focused Virtual Library experience for students who want study rooms, accountability, focus tools, rankings, and app-based progress."
+          content="Virtual Library helps students prepare for any exam with live study rooms, focus tools, revision routines, communities, and compact access plans."
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="min-h-screen bg-white text-slate-900">
-        <header className="fixed inset-x-0 top-0 z-50 border-b border-[#ece6f8] bg-[#fbf9ff]/95 backdrop-blur">
-          <div className="mx-auto flex h-16 items-center justify-between px-4 sm:px-10">
-            <Link href="/" className="flex items-center">
-              <img src="/img/logo.svg" alt="Virtual Library" className="h-8 w-auto sm:h-9" />
+      <div className="min-h-screen bg-[#fbfbfd] text-[#11111f]">
+        <header className="sticky top-0 z-50 border-b border-[#e8e5ef] bg-white/92 backdrop-blur">
+          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
+            <Link href="/" className="flex items-center" aria-label="Virtual Library home">
+              <img src="/img/logo.svg" alt="Virtual Library" className="h-8 w-auto" />
             </Link>
 
-            <nav className="hidden items-center gap-6 lg:flex">
+            <nav className="hidden items-center gap-7 lg:flex">
               {NAV_ITEMS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => openSection(item.id, 80)}
-                  className="text-sm font-semibold text-[#34364a] transition hover:text-[#6d28d9]"
+                  onClick={() => scrollToSection(item.id)}
+                  className="text-sm font-semibold text-[#4d485f] transition hover:text-[#6d35df]"
                 >
                   {item.label}
                 </button>
               ))}
             </nav>
 
-            <div className="hidden items-center gap-3 md:flex">
+            <div className="flex items-center gap-3">
+              <Link
+                href="/login"
+                className="hidden text-sm font-semibold text-[#11111f] transition hover:text-[#6d35df] sm:inline-flex"
+              >
+                Sign In
+              </Link>
               <button
                 type="button"
-                onClick={() => openSection('pricing', 80)}
-                className="inline-flex h-10 items-center justify-center rounded-full border border-[#d6cde8] px-5 text-sm font-bold text-[#191827] transition hover:border-[#6d28d9] hover:text-[#6d28d9]"
+                onClick={() => scrollToSection('plans')}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-[#6d35df] px-5 text-sm font-bold text-white shadow-[0_14px_26px_rgba(109,53,223,0.18)] transition hover:bg-[#5b25c9]"
               >
                 View Plans
               </button>
-              <button
-                type="button"
-                onClick={() => openSection('download-app', 96)}
-                className="inline-flex h-10 items-center justify-center rounded-full bg-[#6d28d9] px-5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(109,40,217,0.22)] transition hover:bg-[#5b21b6]"
-              >
-                Download App
-              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((value) => !value)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#ded5f1] text-[#34364a] md:hidden"
-              aria-label="Toggle menu"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6">
-                <path
-                  d={mobileMenuOpen ? 'M6 6l12 12M18 6L6 18' : 'M4 8h16M4 16h16'}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                />
-              </svg>
-            </button>
           </div>
-
-          {mobileMenuOpen && (
-            <div className="border-t border-[#ece6f8] bg-white px-4 py-3 md:hidden">
-              <div className="flex flex-col gap-2">
-                {NAV_ITEMS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => openSection(item.id, 80)}
-                    className="rounded-xl px-3 py-2 text-left text-sm font-semibold text-[#34364a]"
-                  >
-                    {item.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => openSection('download-app', 96)}
-                  className="rounded-xl bg-[#6d28d9] px-3 py-2 text-left text-sm font-bold text-white"
-                >
-                  Download App
-                </button>
-              </div>
-            </div>
-          )}
         </header>
 
-        <main className="pt-16">
-          <section className="bg-[#f8f4ff]">
-            <div className="mx-auto overflow-hidden bg-[linear-gradient(118deg,#6021dc_0%,#7932ec_52%,#a58df0_100%)] text-white shadow-[0_28px_80px_rgba(69,31,149,0.24)] lg:h-[calc(100svh-4rem)]">
-              <div className="relative flex flex-col overflow-hidden lg:h-full lg:min-h-0">
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(44,10,112,0.34),rgba(44,10,112,0.04)_58%,rgba(255,255,255,0.10))]" />
-
-                <div className="relative z-10 mx-auto grid w-full max-w-[1390px] flex-1 items-center gap-5 px-4 pb-0 pt-5 sm:px-8 sm:pt-10 lg:min-h-0 lg:grid-cols-[0.92fr_1.08fr] lg:gap-0 lg:py-0 xl:px-10">
-                  <div className="max-w-[43rem] pb-1 lg:pb-8">
-                    <p className="mb-4 inline-flex max-w-full rounded-full border border-white/20 bg-white/10 px-3 py-2 text-[10px] font-bold uppercase leading-none text-white/82 backdrop-blur sm:px-4 sm:text-xs">
-                      Virtual Library for focused study
-                    </p>
-                    <h1 className="max-w-[30rem] text-[2.15rem] font-bold leading-[1.08] tracking-normal max-[380px]:text-[1.95rem] sm:max-w-[42rem] sm:text-[3.2rem] lg:text-[3rem]">
-                      {HERO_COPY.title}
-                    </h1>
-
-                    <p className="mt-4 max-w-[22rem] text-sm leading-6 text-white/78 sm:max-w-[39rem] sm:text-lg sm:leading-8 lg:text-xl lg:leading-8 xl:text-[1.28rem] xl:leading-8">
-                      {HERO_COPY.description}
-                    </p>
-
-                    <div className="mt-7 flex w-full max-w-[22rem] flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center">
-                      <button
-                        type="button"
-                        onClick={() => openSection('pricing', 80)}
-                        className="inline-flex h-10 font-semibold w-full min-w-[170px] items-center justify-center rounded-full bg-white px-8 text-base text-[#5b21b6] shadow-[0_20px_42px_rgba(28,10,74,0.24)] transition hover:bg-[#f6f1ff] sm:w-auto"
-                      >
-                        Enroll Now
-                      </button>
-                      <div id="download-app">
-                        <DownloadOptions compact variant="light" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative flex w-full items-end justify-center self-end overflow-visible pt-2 lg:h-full lg:min-h-0 lg:justify-end lg:pt-0">
-                    <img
-                      src={HERO_COPY.image}
-                      alt={HERO_COPY.alt}
-                      className="relative z-10 h-auto w-full max-w-[300px] object-contain sm:max-w-[590px] lg:absolute lg:bottom-[-1px] lg:right-[-7vw] lg:max-h-[96%] lg:w-auto lg:max-w-none xl:right-[-2rem] xl:max-h-[99%]"
-                    />
-                  </div>
-                </div>
-
-
-              </div>
-            </div>
-          </section>
-          <div className="relative z-20 bg-black px-4 py-3 text-white">
-            <div className="mx-auto grid max-w-7xl grid-cols-2 gap-y-5 sm:grid-cols-4">
-              {HERO_STATS.map((item, index) => (
-                <div
-                  key={item.label}
-                  className={cn(
-                    'px-3 text-center sm:px-6',
-                    index !== 0 && 'sm:border-l sm:border-white/10'
-                  )}
-                >
-                  <p
-                    className={cn(
-                      'text-3xl font-black leading-none tracking-normal sm:text-4xl',
-                      item.accent ? 'text-[#00d7a0]' : 'text-white'
-                    )}
-                  >
-                    {item.leadingDot && <span className="mr-1 text-[#00d7a0]">•</span>}
-                    {item.value}
-                    {item.suffix && <span className="text-[#00d7a0]">{item.suffix}</span>}
-                  </p>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-[#d8d3eb] sm:text-sm">{item.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <section id="pricing" className="scroll-mt-24 bg-white py-16 sm:py-20">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6">
-              <div className="mx-auto max-w-3xl text-center">
-                <SectionPill>Plans</SectionPill>
-                <h2 className="mt-6 text-4xl font-bold tracking-normal text-slate-950 md:text-6xl">
-                  Pick your Virtual Library access.
-                </h2>
-                <p className="mt-4 text-lg leading-8 text-[#5a5d78]">
-                  Choose a plan here, then finish OTP and billing on the next screen. Every plan
-                  unlocks daily study rooms, structured revision notes, live rankings, and community access.
+        <main>
+          <section className="overflow-hidden bg-[linear-gradient(180deg,#f8f4ff_0%,#ffffff_100%)]">
+            <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 pb-10 pt-8 sm:px-6 lg:min-h-[640px] lg:grid-cols-[0.96fr_1.04fr] lg:pb-14 lg:pt-10">
+              <div className="relative z-10 max-w-2xl">
+                <p className="inline-flex rounded-full border border-[#e6dcff] bg-white px-4 py-2 text-xs font-bold text-[#6d35df] shadow-[0_10px_24px_rgba(45,28,84,0.06)]">
+                  Focus rooms for every serious learner
                 </p>
-              </div>
 
-              {pricingLoading && (
-                <div className="mt-12 rounded-[30px] border border-[#ebe2ff] bg-[#fbf9ff] px-6 py-12 text-center">
-                  <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#e6dbff] border-t-[#7c3aed]" />
-                  <p className="mt-5 text-sm font-semibold text-[#5a5d78]">Loading current prices...</p>
-                </div>
-              )}
+                <h1 className="mt-6 text-[2.65rem] font-black leading-[1.04] tracking-normal text-[#11111f] sm:text-[3.7rem] lg:text-[4.35rem]">
+                  Build a study routine that actually holds.
+                </h1>
 
-              {!pricingLoading && pricingError && (
-                <div className="mt-12 rounded-[30px] border border-rose-200 bg-rose-50 px-6 py-8 text-center">
-                  <p className="text-sm font-semibold text-rose-700">{pricingError}</p>
+                <p className="mt-5 max-w-xl text-base leading-8 text-[#625d73] sm:text-lg">
+                  Virtual Library gives exam aspirants, college students, and working learners a
+                  quiet system for showing up every day: live study rooms, focus tools, revision cues,
+                  and accountability in one app.
+                </p>
+
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
                     type="button"
-                    onClick={retryLoadPublicPlans}
-                    className="mt-5 inline-flex items-center justify-center rounded-2xl bg-[#6d28d9] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#5b21b6]"
+                    onClick={() => scrollToSection('plans')}
+                    className="inline-flex h-12 min-w-[190px] items-center justify-center gap-2 rounded-lg bg-[#11111f] px-6 text-sm font-bold text-white shadow-[0_18px_38px_rgba(17,17,31,0.18)] transition hover:bg-[#26233a]"
                   >
-                    Reload prices
+                    Choose Access
+                    <ArrowRightIcon className="h-4 w-4" />
                   </button>
+                  <DownloadButtons />
                 </div>
-              )}
 
-              {!pricingLoading && !pricingError && pricingPlans.length > 0 && (
-                <div className="mt-12 flex flex-wrap justify-center gap-5">
-                  {pricingPlans.map((plan, index) => (
-                    <div
-                      key={plan.planId}
-                      className="flex w-full max-w-[400px] md:w-[calc(50%-0.625rem)] md:max-w-none xl:w-[calc(33.333%-0.834rem)]"
-                    >
-                      <PricingPlanCard
-                        plan={plan}
-                        meta={getPricingPlanMeta(plan, pricingPlans)}
-                        tilt={index % 2 === 0 ? 'left' : 'right'}
-                        onSelect={handleSelectPlan}
-                      />
+                <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {HERO_STATS.map((stat) => (
+                    <div key={stat.label} className="rounded-lg border border-[#e9e5f4] bg-white px-4 py-3 shadow-[0_12px_28px_rgba(33,20,70,0.05)]">
+                      <p className="text-2xl font-black leading-none text-[#11111f]">{stat.value}</p>
+                      <p className="mt-1 text-xs font-semibold leading-4 text-[#716b83]">{stat.label}</p>
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
 
-              {!pricingLoading && !pricingError && pricingPlans.length === 0 && (
-                <div className="mt-12 rounded-[30px] border border-[#ebe2ff] bg-[#fbf9ff] px-6 py-10 text-center">
-                  <p className="text-sm font-semibold text-[#5a5d78]">
-                    No public plans are available right now.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={retryLoadPublicPlans}
-                    className="mt-5 inline-flex items-center justify-center rounded-2xl bg-[#6d28d9] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#5b21b6]"
-                  >
-                    Check again
-                  </button>
-                </div>
-              )}
+              <div className="relative mx-auto flex w-full max-w-[680px] items-center justify-center lg:max-w-none">
+                <div className="absolute inset-x-6 bottom-4 top-8 rounded-[36px] bg-[#11111f] shadow-[0_34px_80px_rgba(17,17,31,0.20)]" />
+                <img
+                  src={HERO_IMAGE}
+                  alt="Virtual Library app showing live study rooms and practice notes"
+                  className="relative z-10 h-auto w-full max-w-[360px] object-contain sm:max-w-[440px] lg:max-w-[540px]"
+                />
+              </div>
             </div>
           </section>
 
-          <section id="features" className="bg-white py-16 sm:py-20">
+          <section id="product" className="scroll-mt-20 bg-white py-16 sm:py-20">
             <div className="mx-auto max-w-7xl px-4 sm:px-6">
-              <div className="mx-auto max-w-3xl text-center">
-                <SectionPill>Everything You Need</SectionPill>
-                <h2 className="mt-6 text-4xl font-bold tracking-normal text-slate-950 md:text-6xl">
-                  Built for <span className="text-[#7c3aed]">Serious Students</span>
-                </h2>
-                <p className="mt-4 text-lg leading-8 text-[#5a5d78]">
-                  Every feature is designed to keep you consistent, focused, and accountable.
+              <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#6d35df]">The product</p>
+                  <h2 className="mt-4 max-w-xl text-4xl font-black leading-tight tracking-normal text-[#11111f] sm:text-5xl">
+                    A focused workspace, not another noisy course page.
+                  </h2>
+                </div>
+                <p className="max-w-2xl text-base leading-8 text-[#625d73]">
+                  Use Virtual Library around whatever you are preparing for. The app is built around
+                  repeatable study behavior: enter a room, protect the session, record progress, and come back.
                 </p>
               </div>
 
-              <div className="mt-16 space-y-14">
-                {FEATURE_SECTIONS.map((section) => (
-                  <div
-                    key={section.title}
-                    className={cn(
-                      'grid items-center gap-10 lg:grid-cols-2',
-                      section.reverse && 'lg:[&>*:first-child]:order-2 lg:[&>*:last-child]:order-1'
-                    )}
-                  >
-                    <div className="rounded-[32px] border border-[#f0e8ff] bg-[#fbf9ff] p-6 shadow-[0_20px_48px_rgba(109,40,217,0.06)]">
-                      <img src={section.image} alt={section.alt} className="mx-auto h-auto w-full max-w-[460px]" />
-                    </div>
+              <div className="mt-12 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+                <div className="overflow-hidden rounded-xl border border-[#e4dfed] bg-[#11111f] shadow-[0_28px_70px_rgba(17,17,31,0.16)]">
+                  <img src={STUDY_ROOM_IMAGE} alt="Virtual Library live study room" className="h-full min-h-[300px] w-full object-cover" />
+                </div>
 
-                    <div>
-                      <h3 className="text-4xl font-bold tracking-normal text-slate-950 md:text-5xl">
-                        {section.title}
-                      </h3>
-                      <p className="mt-5 text-2xl font-medium text-[#5a37a8]">{section.subtitle}</p>
-                      <p className="mt-5 max-w-xl text-lg leading-8 text-[#5a5d78]">
-                        {section.description}
-                      </p>
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+                  {FEATURES.slice(0, 2).map((feature) => (
+                    <FeatureCard key={feature.title} feature={feature} />
+                  ))}
+                </div>
+              </div>
 
-                      <button
-                        type="button"
-                        onClick={() => openSection('pricing')}
-                        className="mt-8 inline-flex min-w-[240px] items-center justify-center rounded-2xl bg-[linear-gradient(90deg,#6d28d9,#8b5cf6)] px-8 py-4 text-lg font-semibold text-white shadow-[0_18px_38px_rgba(109,40,217,0.20)] transition hover:opacity-95"
-                      >
-                        {section.cta}
-                      </button>
-                    </div>
-                  </div>
+              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                {FEATURES.slice(2).map((feature) => (
+                  <FeatureCard key={feature.title} feature={feature} />
                 ))}
               </div>
             </div>
           </section>
 
-          <section className="bg-white pb-20">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6">
-              <h2 className="text-4xl font-bold tracking-normal text-slate-950">
-                <span className="mr-2 text-[#7c3aed]">•</span>
-                More From Virtual Library
-              </h2>
-
-              <div className="mt-10 grid gap-4 md:grid-cols-2">
-                {MORE_FEATURES.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="flex items-start gap-4 rounded-[28px] border border-[#ebe2ff] bg-white px-6 py-6 shadow-[0_20px_48px_rgba(109,40,217,0.05)]"
-                  >
-                    <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl', feature.tone)}>
-                      <FeatureIcon icon={feature.icon} />
-                    </div>
-                    <div>
-                      <h3 className="text-3xl font-bold tracking-normal text-[#7c3aed]">
-                        {feature.title}
-                      </h3>
-                      <p className="mt-2 text-lg leading-7 text-[#5a5d78]">{feature.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-[#fbf9ff] py-16 sm:py-20">
-            <div className="mx-auto grid max-w-7xl items-start gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <section id="routine" className="scroll-mt-20 bg-[#f6f5fa] py-16 sm:py-20">
+            <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.78fr_1.22fr] lg:items-center">
               <div>
-                <SectionPill>Who Can Join</SectionPill>
-                <h2 className="mt-6 max-w-lg text-4xl font-bold tracking-normal text-slate-950 md:text-6xl">
-                  Anyone who wants to stay consistent with their studies.
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#6d35df]">Routine design</p>
+                <h2 className="mt-4 text-4xl font-black leading-tight tracking-normal text-[#11111f] sm:text-5xl">
+                  Make studying feel like a scheduled place to be.
                 </h2>
+                <p className="mt-5 text-base leading-8 text-[#625d73]">
+                  Learners do better when the next action is obvious. Virtual Library keeps the workflow
+                  simple enough to repeat daily.
+                </p>
               </div>
 
-              <div className="grid gap-4">
-                {WHO_CAN_JOIN.map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-start gap-4 rounded-[24px] border border-[#ebe2ff] bg-white px-5 py-5 shadow-[0_18px_44px_rgba(109,40,217,0.05)]"
-                  >
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6d28d9] text-white">
-                      <CheckIcon className="h-4 w-4" />
+              <div className="grid gap-4 md:grid-cols-3">
+                {ROUTINE_STEPS.map((step, index) => (
+                  <article key={step.title} className="rounded-xl border border-[#e3dfeb] bg-white p-6 shadow-[0_18px_44px_rgba(33,20,70,0.06)]">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#11111f] text-sm font-black text-white">
+                      {index + 1}
                     </span>
-                    <p className="text-lg font-semibold leading-7 text-slate-800">{item}</p>
-                  </div>
+                    <h3 className="mt-7 text-xl font-black tracking-normal text-[#11111f]">{step.title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-[#625d73]">{step.description}</p>
+                  </article>
                 ))}
-              </div>
-            </div>
-          </section>
-
-          <section id="steps" className="bg-white py-16 sm:py-20">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6">
-              <div className="mx-auto max-w-4xl text-center">
-                <SectionPill>Simple Process</SectionPill>
-                <h2 className="mt-6 text-4xl font-bold tracking-normal text-slate-950 md:text-6xl">
-                  Start Studying <span className="text-[#7c3aed]">In 3 Steps</span>
-                </h2>
-                <p className="mt-4 text-lg leading-8 text-[#5a5d78]">
-                  No complicated setup. Join, study, and keep your routine moving.
-                </p>
-              </div>
-
-              <div className="relative mt-16 hidden lg:block">
-                <div className="absolute left-[16.66%] right-[16.66%] top-7 h-px bg-[#cdb4ff]" />
-                <div className="grid grid-cols-3 gap-8">
-                  {FLOW_STEPS.map((step, index) => (
-                    <div key={step.id} className="text-center">
-                      <div
-                        className={cn(
-                          'mx-auto flex h-16 w-16 items-center justify-center rounded-full border-4 text-3xl font-bold',
-                          index === 0 && 'border-[#7c3aed] bg-[#7c3aed] text-white shadow-[0_14px_28px_rgba(124,58,237,0.28)]',
-                          index === 1 && 'border-[#7c3aed] bg-white text-[#7c3aed]',
-                          index === 2 && 'border-[#20c997] bg-white text-[#20c997]'
-                        )}
-                      >
-                        {step.id}
-                      </div>
-                      <h3 className="mt-10 text-3xl font-bold tracking-normal text-slate-950">
-                        {step.title}
-                      </h3>
-                      <p className="mt-4 text-lg leading-8 text-[#5a5d78]">{step.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-12 grid gap-6 lg:hidden">
-                {FLOW_STEPS.map((step, index) => (
-                  <div key={step.id} className="rounded-[28px] border border-[#ebe2ff] bg-[#fbf9ff] p-6 text-center">
-                    <div
-                      className={cn(
-                        'mx-auto flex h-14 w-14 items-center justify-center rounded-full border-4 text-2xl font-bold',
-                        index === 0 && 'border-[#7c3aed] bg-[#7c3aed] text-white',
-                        index === 1 && 'border-[#7c3aed] bg-white text-[#7c3aed]',
-                        index === 2 && 'border-[#20c997] bg-white text-[#20c997]'
-                      )}
-                    >
-                      {step.id}
-                    </div>
-                    <h3 className="mt-5 text-2xl font-bold tracking-normal text-slate-950">
-                      {step.title}
-                    </h3>
-                    <p className="mt-3 text-base leading-7 text-[#5a5d78]">{step.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section id="why-virtual-library" className="bg-[#140d1f] py-16 text-white sm:py-20">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6">
-              <div className="text-center">
-                <SectionPill dark>Success Stories</SectionPill>
-                <h2 className="mt-6 text-5xl font-bold tracking-normal md:text-7xl">
-                  Why Virtual Library?
-                </h2>
-                <p className="mt-4 text-3xl font-semibold text-[#8f68ff] md:text-5xl">
-                  Trusted by students who study every day.
-                </p>
-              </div>
-
-              <div className="mt-14 flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => openSection('pricing')}
-                  className="hidden h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/50 text-white lg:flex"
-                  aria-label="Open plans"
-                >
-                  <ArrowLeftIcon className="h-7 w-7" />
-                </button>
-
-                <div className="flex-1 rounded-[36px] bg-[#1b112c] p-8 shadow-[0_28px_70px_rgba(7,5,16,0.32)]">
-                  <div className="grid items-center gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
-                    <div className="overflow-hidden rounded-[28px] bg-[#f4bb32]">
-                      <img
-                        src={TESTIMONIAL.image}
-                        alt={TESTIMONIAL.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex flex-wrap items-center gap-4">
-                        <h3 className="text-4xl font-bold tracking-normal">{TESTIMONIAL.name}</h3>
-                        <span className="text-3xl text-[#f59e0b]">★★★★★</span>
-                      </div>
-                      <p className="mt-5 text-2xl font-semibold italic leading-10 text-white/95">
-                        “ {TESTIMONIAL.quote} ”
-                      </p>
-                      <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-                        <div>
-                          <p className="text-4xl font-bold tracking-normal">{TESTIMONIAL.result}</p>
-                          <p className="mt-2 text-xl text-white/60">{TESTIMONIAL.meta}</p>
-                        </div>
-                        <span className="rounded-full border border-[#7c3aed] px-5 py-2 text-base font-semibold text-[#8f68ff]">
-                          {TESTIMONIAL.pill}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => openSection('pricing')}
-                  className="hidden h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/50 text-white lg:flex"
-                  aria-label="Open plans"
-                >
-                  <ArrowRightIcon className="h-7 w-7" />
-                </button>
               </div>
             </div>
           </section>
 
           <section className="bg-white py-16 sm:py-20">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6">
-              <div className="rounded-[36px] bg-[linear-gradient(100deg,#191827_0%,#351b73_48%,#6d28d9_100%)] px-6 py-12 text-center text-white shadow-[0_28px_72px_rgba(31,20,98,0.22)] sm:px-10">
-                <p className="text-xs font-bold uppercase tracking-normal text-white/55">Get started in the app</p>
-                <h2 className="mt-4 text-4xl font-bold tracking-normal md:text-6xl">
-                  Build a study routine that keeps showing up.
+            <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
+              <div className="overflow-hidden rounded-xl border border-[#e4dfed] bg-[#11111f]">
+                <img src={COMMUNITY_IMAGE} alt="Virtual Library community groups" className="h-full min-h-[300px] w-full object-cover" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#6d35df]">Community</p>
+                <h2 className="mt-4 text-4xl font-black leading-tight tracking-normal text-[#11111f] sm:text-5xl">
+                  Prepare beside people with the same daily standard.
                 </h2>
-                <p className="mt-4 text-lg leading-8 text-white/72 md:text-2xl">
-                  Join students already using Virtual Library for focus rooms, accountability, and daily progress.
+                <p className="mt-5 text-base leading-8 text-[#625d73]">
+                  Communities, rankings, and shared rooms help learners stay accountable without making
+                  the product feel loud or performative.
                 </p>
+              </div>
+            </div>
+          </section>
 
-                <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row sm:flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => openSection('pricing', 80)}
-                    className="inline-flex min-w-[220px] items-center justify-center rounded-full bg-white px-8 py-2 text-lg font-bold text-[#22143f] transition hover:bg-slate-100"
-                  >
-                    View Plans
-                  </button>
-                  <DownloadOptions compact />
+          <section id="plans" className="scroll-mt-20 bg-[#11111f] py-16 text-white sm:py-20">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6">
+              <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#9d86ff]">Available plans</p>
+                  <h2 className="mt-4 text-4xl font-black leading-tight tracking-normal sm:text-5xl">
+                    Same tools. Choose the duration.
+                  </h2>
+                  <p className="mt-5 text-base leading-8 text-white/62">
+                    Every plan includes the complete Virtual Library experience. Longer plans simply lower
+                    the effective monthly cost.
+                  </p>
+
+                  <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.06] p-5">
+                    <p className="text-sm font-black text-white">Included in every plan</p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                      {INCLUDED_FEATURES.map((feature) => (
+                        <div key={feature} className="flex items-start gap-3 text-sm leading-5 text-white/72">
+                          <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#63e6be]" />
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
+                <div className="rounded-xl border border-white/10 bg-white p-2 text-[#11111f] shadow-[0_30px_80px_rgba(0,0,0,0.28)]">
+                  {pricingLoading && (
+                    <div className="flex min-h-[220px] flex-col items-center justify-center px-6 py-10 text-center">
+                      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#e7e2f5] border-t-[#6d35df]" />
+                      <p className="mt-5 text-sm font-semibold text-[#625d73]">Loading current prices...</p>
+                    </div>
+                  )}
+
+                  {!pricingLoading && pricingError && (
+                    <div className="px-5 py-8 text-center">
+                      <p className="text-sm font-semibold text-rose-700">{pricingError}</p>
+                      <button
+                        type="button"
+                        onClick={retryLoadPublicPlans}
+                        className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[#6d35df] px-5 text-sm font-bold text-white transition hover:bg-[#5b25c9]"
+                      >
+                        Reload prices
+                      </button>
+                    </div>
+                  )}
+
+                  {!pricingLoading && !pricingError && pricingPlans.length > 0 && (
+                    <div className="divide-y divide-[#ece8f4]">
+                      {pricingPlans.map((plan) => (
+                        <PlanRow
+                          key={plan.planId}
+                          plan={plan}
+                          recommended={plan.planId === recommendedPlanId}
+                          onSelect={() => void handleSelectPlan(plan)}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {!pricingLoading && !pricingError && pricingPlans.length === 0 && (
+                    <div className="px-5 py-8 text-center">
+                      <p className="text-sm font-semibold text-[#625d73]">No public plans are available right now.</p>
+                      <button
+                        type="button"
+                        onClick={retryLoadPublicPlans}
+                        className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[#6d35df] px-5 text-sm font-bold text-white transition hover:bg-[#5b25c9]"
+                      >
+                        Check again
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="reviews" className="scroll-mt-20 bg-white py-16 sm:py-20">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6">
+              <div className="mx-auto max-w-3xl text-center">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#6d35df]">Learner notes</p>
+                <h2 className="mt-4 text-4xl font-black tracking-normal text-[#11111f] sm:text-5xl">
+                  Neutral by design. Useful across preparation styles.
+                </h2>
+              </div>
+
+              <div className="mt-12 grid gap-5 md:grid-cols-3">
+                {TESTIMONIALS.map((testimonial) => (
+                  <article key={testimonial.name} className="rounded-xl border border-[#e4dfed] bg-[#fbfbfd] p-6">
+                    <p className="text-lg leading-none text-[#f8b400]">★★★★★</p>
+                    <p className="mt-5 min-h-[120px] text-sm leading-7 text-[#504a61]">"{testimonial.quote}"</p>
+                    <div className="mt-6 flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#6d35df] text-xs font-black text-white">
+                        {testimonial.initials}
+                      </span>
+                      <div>
+                        <p className="text-sm font-black text-[#11111f]">{testimonial.name}</p>
+                        <p className="text-xs font-semibold text-[#716b83]">{testimonial.role}</p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-[linear-gradient(115deg,#263cff_0%,#7c35df_52%,#e10689_100%)] px-4 py-16 text-center text-white sm:px-6 sm:py-20">
+            <div className="mx-auto max-w-4xl">
+              <h2 className="text-4xl font-black tracking-normal sm:text-6xl">Start with the next study block.</h2>
+              <p className="mt-5 text-base leading-7 text-white/82 sm:text-lg">
+                Choose access, complete checkout, and begin in the app with the same tools regardless of your exam.
+              </p>
+              <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('plans')}
+                  className="inline-flex h-12 min-w-[190px] items-center justify-center gap-2 rounded-lg bg-white px-6 text-sm font-bold text-[#11111f] transition hover:bg-slate-100"
+                >
+                  View Available Plans
+                  <ArrowRightIcon className="h-4 w-4" />
+                </button>
+                <Link
+                  href="/contact"
+                  className="inline-flex h-12 min-w-[170px] items-center justify-center rounded-lg border border-white/22 bg-white/10 px-6 text-sm font-bold text-white backdrop-blur transition hover:bg-white/16"
+                >
+                  Talk to us
+                </Link>
               </div>
             </div>
           </section>
         </main>
 
-        <footer className="bg-[#f5f5f8]">
-          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
-            <div className="grid gap-10 lg:grid-cols-[1.4fr_0.9fr_0.9fr_0.9fr]">
+        <footer className="bg-[#070712] px-4 py-12 text-white sm:px-6">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid gap-10 md:grid-cols-[1.3fr_0.8fr_0.8fr_0.8fr]">
               <div>
-                <img src="/img/logo.svg" alt="Virtual Library" className="h-14 w-auto" />
-                <div className="mt-6 flex flex-wrap gap-3">
-                  {['in', 'ig', 'yt', 'x'].map((item) => (
-                    <span
-                      key={item}
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold uppercase text-slate-500"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
+                <img src="/img/logo.svg" alt="Virtual Library" className="h-9 w-auto brightness-0 invert" />
+                <p className="mt-5 max-w-xs text-sm leading-6 text-white/58">
+                  Live study rooms, focus tools, revision routines, and communities for learners preparing seriously.
+                </p>
               </div>
 
               <FooterGroup
-                title="About Us"
+                title="Product"
                 links={[
-                  { label: 'Company Info', href: '/about' },
-                  { label: 'Contact Us', href: '/contact' },
+                  { label: 'Study rooms', href: '#product' },
+                  { label: 'Focus tools', href: '#product' },
+                  { label: 'Available plans', href: '#plans' },
                 ]}
               />
               <FooterGroup
-                title="Learn with Us"
+                title="Company"
                 links={[
-                  { label: 'Learning Methods', href: '#features' },
-                  { label: 'Expert Tutors', href: '#why-virtual-library' },
+                  { label: 'About Us', href: '/about' },
+                  { label: 'Contact', href: '/contact' },
+                  { label: 'Support', href: '/contact' },
                 ]}
               />
               <FooterGroup
-                title="Discover"
+                title="Legal"
                 links={[
-                  { label: 'Support Center', href: '/contact' },
+                  { label: 'Privacy Policy', href: '/privacy-policy' },
+                  { label: 'Terms of Service', href: '/terms-and-conditions' },
+                  { label: 'Refund Policy', href: '/refund-policy' },
                 ]}
               />
             </div>
 
-            <div className="mt-12 flex flex-col gap-6 border-t border-slate-200 pt-6 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-              <p>© 2026 Virtual Library. All rights reserved.</p>
-              <div className="flex flex-wrap gap-4 md:gap-8">
-                <a href="/privacy-policy" className="transition hover:text-[#6d28d9]">
-                  Privacy Policy
-                </a>
-                <a href="/terms-and-conditions" className="transition hover:text-[#6d28d9]">
-                  Terms & Conditions
-                </a>
-                <a href="/refund-policy" className="transition hover:text-[#6d28d9]">
-                  Refund Policy
-                </a>
-              </div>
+            <div className="mt-10 border-t border-white/10 pt-6 text-center text-sm text-white/48">
+              © 2026 Virtual Library. All rights reserved.
             </div>
           </div>
         </footer>
-
       </div>
     </>
   )
 }
 
-function SectionPill({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
+function FeatureCard({ feature }: { feature: Feature }) {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full border px-5 py-2 text-xs font-bold uppercase tracking-normal',
-        dark
-          ? 'border-[#7c3aed] bg-[#241339] text-[#8f68ff]'
-          : 'border-[#b78cff] bg-white text-[#7c3aed]'
-      )}
-    >
-      {children}
-    </span>
+    <article className="rounded-xl border border-[#e4dfed] bg-white p-6 shadow-[0_16px_44px_rgba(33,20,70,0.05)]">
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#f1ebff] text-[#6d35df]">
+          <FeatureIcon icon={feature.icon} />
+        </span>
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#6d35df]">{feature.eyebrow}</p>
+      </div>
+      <h3 className="mt-6 text-2xl font-black tracking-normal text-[#11111f]">{feature.title}</h3>
+      <p className="mt-3 text-sm leading-7 text-[#625d73]">{feature.description}</p>
+    </article>
   )
 }
 
-function DownloadOptions({
-  compact = false,
-  variant = 'glass',
+function PlanRow({
+  onSelect,
+  plan,
+  recommended,
 }: {
-  compact?: boolean
-  variant?: 'glass' | 'light'
+  onSelect: () => void
+  plan: BillingPlan
+  recommended: boolean
 }) {
-  const isLight = variant === 'light'
-  const linkClass = cn(
-    'inline-flex items-center justify-center gap-3 rounded-full border text-left transition',
-    compact ? 'h-10 min-w-[168px] px-4 py-0' : 'min-w-[178px] px-4 py-3',
-    isLight
-      ? 'border-white bg-white text-[#5b21b6] shadow-[0_20px_42px_rgba(28,10,74,0.18)] hover:bg-[#f6f1ff]'
-      : 'border-white/22 bg-white/12 text-white backdrop-blur hover:bg-white/18'
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_84px] items-center gap-x-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_150px_124px] sm:px-5 sm:py-4">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-black text-[#11111f]">{formatPlanTitle(plan)}</h3>
+          {recommended && (
+            <span className="rounded-full bg-[#fff2b8] px-2.5 py-1 text-[11px] font-black text-[#5b4300]">
+              Recommended
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm font-semibold text-[#716b83]">{formatPlanDuration(plan.durationMonths)} access</p>
+      </div>
+
+      <div className="text-right sm:text-left">
+        <p className="text-lg font-black text-[#11111f] sm:text-xl">{formatCurrency(plan.amountPaise, plan.currency)}</p>
+        <p className="mt-0.5 text-xs font-semibold text-[#716b83]">{formatMonthlyEquivalent(plan)} / month</p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          'inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-black transition sm:h-10 sm:px-4',
+          recommended
+            ? 'bg-[#11111f] text-white hover:bg-[#26233a]'
+            : 'bg-[#f0edf6] text-[#11111f] hover:bg-[#e4deee]'
+        )}
+      >
+        Choose
+      </button>
+    </div>
   )
-  const eyebrowClass = isLight ? 'text-[#77669d]' : 'text-white/58'
+}
+
+function getRecommendedPlanId(plans: BillingPlan[]) {
+  if (!plans.length) {
+    return ''
+  }
 
   return (
-    <div className={cn('flex flex-col gap-3 sm:flex-row sm:flex-wrap', compact && 'justify-center')}>
-      <a href={GOOGLE_PLAY_HREF} target="_blank" rel="noreferrer" className={linkClass}>
-        <PlayStoreIcon className="h-6 w-6 shrink-0" />
-        <span>
-          <span className={cn('block text-[11px] font-semibold leading-none', eyebrowClass)}>Get it on</span>
-          <span className="mt-1 block text-sm font-bold leading-none">Google Play</span>
-        </span>
+    plans.find((plan) => plan.durationMonths === 12)?.planId ||
+    plans.find((plan) => plan.durationMonths === 6)?.planId ||
+    plans[Math.min(1, plans.length - 1)]?.planId ||
+    plans[0]?.planId ||
+    ''
+  )
+}
+
+function formatPlanTitle(plan: BillingPlan) {
+  if (plan.name?.trim()) {
+    return plan.name.trim()
+  }
+
+  if (plan.durationMonths === 1) {
+    return 'Monthly'
+  }
+
+  if (plan.durationMonths === 12) {
+    return 'Annual'
+  }
+
+  return `${plan.durationMonths} months`
+}
+
+function formatPlanDuration(durationMonths: number) {
+  return `${durationMonths} ${durationMonths === 1 ? 'month' : 'months'}`
+}
+
+function formatMonthlyEquivalent(plan: BillingPlan) {
+  const monthlyAmountPaise = Math.round(plan.amountPaise / Math.max(plan.durationMonths, 1))
+  return formatCurrency(monthlyAmountPaise, plan.currency)
+}
+
+function DownloadButtons() {
+  return (
+    <div className="flex h-12 items-center justify-center gap-3 rounded-lg border border-[#e7e1f4] bg-white px-5 text-sm font-bold text-[#11111f] shadow-[0_14px_30px_rgba(35,25,80,0.08)]">
+      <span>Download on</span>
+      <a href={GOOGLE_PLAY_HREF} target="_blank" rel="noreferrer" aria-label="Download on Google Play">
+        <PlayStoreIcon className="h-5 w-5 text-[#24a148]" />
       </a>
-      <a href={APP_STORE_HREF} target="_blank" rel="noreferrer" className={linkClass}>
-        <AppleIcon className="h-6 w-6 shrink-0" />
-        <span>
-          <span className={cn('block text-[11px] font-semibold leading-none', eyebrowClass)}>Download on</span>
-          <span className="mt-1 block text-sm font-bold leading-none">App Store</span>
-        </span>
+      <a href={APP_STORE_HREF} target="_blank" rel="noreferrer" aria-label="Download on App Store">
+        <AppleIcon className="h-5 w-5 text-[#11111f]" />
       </a>
+    </div>
+  )
+}
+
+function FooterGroup({
+  links,
+  title,
+}: {
+  links: Array<{ label: string; href: string }>
+  title: string
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-white">{title}</h3>
+      <div className="mt-5 space-y-3">
+        {links.map((link) => (
+          <a key={link.label} href={link.href} className="block text-sm text-white/56 transition hover:text-white">
+            {link.label}
+          </a>
+        ))}
+      </div>
     </div>
   )
 }
@@ -862,63 +722,44 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function FeatureIcon({ icon }: { icon: Feature['icon'] }) {
+  switch (icon) {
+    case 'room':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5" aria-hidden="true">
+          <path d="M4 6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v7a2.5 2.5 0 01-2.5 2.5H9l-5 4V6.5z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+        </svg>
+      )
+    case 'focus':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5" aria-hidden="true">
+          <path d="M12 8v4l2.5 2.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M5 3l-2 2M19 3l2 2M12 21a8 8 0 100-16 8 8 0 000 16z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+        </svg>
+      )
+    case 'revision':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5" aria-hidden="true">
+          <path d="M5 5.5A2.5 2.5 0 017.5 3H20v15H7.5A2.5 2.5 0 005 20.5v-15z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M9 7h7M9 11h5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+        </svg>
+      )
+    case 'analytics':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5" aria-hidden="true">
+          <path d="M4 17l5-5 4 4 7-8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M14 8h6v6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+        </svg>
+      )
+  }
+}
+
 function CheckIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
       <path d="M5 10.5l3.2 3.2L15 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
     </svg>
   )
-}
-
-function FooterGroup({
-  title,
-  links,
-}: {
-  title: string
-  links: Array<{ label: string; href: string }>
-}) {
-  return (
-    <div>
-      <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
-      <div className="mt-5 space-y-3">
-        {links.map((link) => (
-          <a key={link.label} href={link.href} className="block text-base text-slate-600 transition hover:text-[#6d28d9]">
-            {link.label}
-          </a>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function FeatureIcon({ icon }: { icon: MoreFeature['icon'] }) {
-  switch (icon) {
-    case 'rankings':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-8 w-8">
-          <path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 01-10 0V4z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-          <path d="M7 6H5a2 2 0 000 4h2M17 6h2a2 2 0 010 4h-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-        </svg>
-      )
-    case 'support':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-8 w-8">
-          <path d="M12 21s-6.5-4.35-8.6-8.27C1.66 9.76 3.2 6 6.94 6c2.03 0 3.15 1.13 4.06 2.36C11.91 7.13 13.03 6 15.06 6 18.8 6 20.34 9.76 20.6 12.73 18.5 16.65 12 21 12 21z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-        </svg>
-      )
-    case 'communities':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-8 w-8">
-          <path d="M16 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M9.5 11a4 4 0 100-8 4 4 0 000 8zM21 21v-2a4 4 0 00-3-3.87M14.5 3.13A4 4 0 0118 7a4 4 0 01-3.5 3.97" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-        </svg>
-      )
-    case 'progress':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-8 w-8">
-          <path d="M4 16l5-5 4 4 7-7M14 8h6v6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-        </svg>
-      )
-  }
 }
 
 function PlayStoreIcon({ className }: { className?: string }) {
@@ -941,17 +782,9 @@ function AppleIcon({ className }: { className?: string }) {
   )
 }
 
-function ArrowLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}>
-      <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  )
-}
-
 function ArrowRightIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className} aria-hidden="true">
       <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
     </svg>
   )

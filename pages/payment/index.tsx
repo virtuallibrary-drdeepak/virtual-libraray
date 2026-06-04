@@ -96,6 +96,15 @@ const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
 const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
 const APP_STORE_HREF = 'https://apps.apple.com/'
+const PAYMENT_PLAN_FEATURES = [
+  '24/7 Live Study Rooms',
+  'Focus Mode - Block distracting apps',
+  'Spaced Repetition Revision Tracker',
+  'Weekly Live Mentorship Sessions',
+  'Mental Health & Yoga Sessions',
+  'Leaderboard & Study Streaks',
+  'Mobile app access (Android & iOS)',
+]
 
 export default function PaymentPage() {
   const router = useRouter()
@@ -198,12 +207,31 @@ export default function PaymentPage() {
       })
   }, [plans])
 
-  const activeCourseId = selectedCourse?.courseId || groupedPlans[0]?.course.courseId || ''
+  const activeCourseId = selectedPlan?.course.courseId || selectedCourse?.courseId || groupedPlans[0]?.course.courseId || ''
   const activeGroup = useMemo(() => {
     return groupedPlans.find((group) => group.course.courseId === activeCourseId) || groupedPlans[0] || null
   }, [activeCourseId, groupedPlans])
 
   const activePlans = activeGroup?.plans || []
+  const checkoutCourseOptions = useMemo(() => {
+    const options = new Map<string, CourseSummary>()
+
+    courseOptions.forEach((course) => {
+      options.set(course.courseId, course)
+    })
+
+    groupedPlans.forEach((group) => {
+      options.set(group.course.courseId, group.course)
+    })
+
+    if (selectedCourse?.courseId) {
+      options.set(selectedCourse.courseId, selectedCourse)
+    }
+
+    return Array.from(options.values()).sort((left, right) => {
+      return (left.displayOrder || 0) - (right.displayOrder || 0)
+    })
+  }, [courseOptions, groupedPlans, selectedCourse])
 
   const basePlan = useMemo(() => {
     return [...activePlans].sort((left, right) => {
@@ -417,10 +445,32 @@ export default function PaymentPage() {
     await loadPublicPlansForSelection()
   }
 
+  async function fetchCheckoutCourseOptions() {
+    try {
+      return await apiFetch<CourseOptionsResponse>('/courses/options', {
+        skipAuth: true,
+        headers: {
+          Accept: 'application/json',
+        },
+      })
+    } catch {
+      return null
+    }
+  }
+
+  function applyCheckoutCourseOptions(options: CourseOptionsResponse | null) {
+    if (!options) {
+      return
+    }
+
+    setCourseOptions(sortCourseOptions(options.courses || []))
+    setCustomCourseOption(options.customCourseOption || null)
+  }
+
   async function loadPublicPlansForSelection() {
     try {
       setScreen('booting')
-      const [data, user] = await Promise.all([
+      const [data, user, checkoutCourses] = await Promise.all([
         apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
           skipAuth: true,
           headers: {
@@ -428,7 +478,9 @@ export default function PaymentPage() {
           },
         }),
         loadSessionUser(),
+        fetchCheckoutCourseOptions(),
       ])
+      applyCheckoutCourseOptions(checkoutCourses)
       const availablePlans = [...(data.plans || [])].sort((left, right) => {
         if ((left.course.displayOrder || 0) !== (right.course.displayOrder || 0)) {
           return (left.course.displayOrder || 0) - (right.course.displayOrder || 0)
@@ -450,9 +502,14 @@ export default function PaymentPage() {
         return
       }
 
+      const nextPlanId = getDefaultPlanId(availablePlans, undefined, getQueryNumber(router.query.durationMonths))
+      const nextPlan = availablePlans.find((plan) => plan.planId === nextPlanId)
+      const nextCourse = nextPlan?.course || data.course || availablePlans[0]?.course || null
+
       setPlans(availablePlans)
-      setSelectedCourse(data.course || availablePlans[0]?.course || null)
-      setSelectedPlanId(getDefaultPlanId(availablePlans))
+      setSelectedCourse(nextCourse)
+      setSelectedCourseChoice(nextCourse?.courseId || '')
+      setSelectedPlanId(nextPlanId)
       setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
       setScreen('planSelect')
       setStatusNote('Choose a plan to continue to payment.')
@@ -465,7 +522,7 @@ export default function PaymentPage() {
   async function loadPublicPlanForPayment(requestedPlanId: string) {
     try {
       setScreen('booting')
-      const [data, user] = await Promise.all([
+      const [data, user, checkoutCourses] = await Promise.all([
         apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
           skipAuth: true,
           headers: {
@@ -473,7 +530,9 @@ export default function PaymentPage() {
           },
         }),
         loadSessionUser(),
+        fetchCheckoutCourseOptions(),
       ])
+      applyCheckoutCourseOptions(checkoutCourses)
       const availablePlans = [...(data.plans || [])].sort((left, right) => {
         if (left.durationMonths !== right.durationMonths) {
           return left.durationMonths - right.durationMonths
@@ -492,8 +551,13 @@ export default function PaymentPage() {
         return
       }
 
+      const nextCourse = shouldUseV2WebFallback
+        ? null
+        : matchingPlan.course || data.course || availablePlans[0]?.course || null
+
       setPlans(availablePlans)
-      setSelectedCourse(data.course || matchingPlan.course)
+      setSelectedCourse(nextCourse)
+      setSelectedCourseChoice(nextCourse?.courseId || '')
       setSelectedPlanId(matchingPlan.planId)
       setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
       setScreen('ready')
@@ -564,9 +628,7 @@ export default function PaymentPage() {
       })
 
       const preferredCourseId = getQueryParam(router.query.courseId)
-      const normalizedCourses = [...(options.courses || [])].sort(
-        (left, right) => (left.displayOrder || 0) - (right.displayOrder || 0)
-      )
+      const normalizedCourses = sortCourseOptions(options.courses || [])
       const hasPreferredCourse = preferredCourseId
         ? normalizedCourses.some((course) => course.courseId === preferredCourseId)
         : false
@@ -754,16 +816,9 @@ export default function PaymentPage() {
       return
     }
 
-    const customerPayload = isPrimaryPaymentLinksFlow ? getPaymentLinkCustomerPayload() : null
-
-    if (isPrimaryPaymentLinksFlow && !customerPayload) {
-      return
-    }
-
     if (!isPrimaryPaymentLinksFlow && !ensureAuthorization('Sign in with your phone number to apply a coupon.')) {
       return
     }
-
     setCouponLoading(true)
     setCouponError('')
     setCouponMessage('')
@@ -771,13 +826,12 @@ export default function PaymentPage() {
 
     try {
       const requestPlanId = selectedPlan.planId
-      const quoteEndpoint = isPrimaryPaymentLinksFlow ? '/billing/guest/payment-links/quote' : '/billing/quote'
+      const quoteEndpoint = getCouponPreviewEndpoint()
       const quote = await apiFetch<BillingQuoteResponse>(quoteEndpoint, {
         method: 'POST',
-        skipAuth: isPrimaryPaymentLinksFlow && !sessionUser,
+        skipAuth: quoteEndpoint === '/billing/plans/quote',
         body: JSON.stringify({
           planId: requestPlanId,
-          ...(customerPayload || {}),
           couponCode: nextCouponCode,
         }),
       })
@@ -799,8 +853,13 @@ export default function PaymentPage() {
       setAppliedCouponCode('')
       setCouponError(quote.message || 'Coupon is not valid for this plan.')
     } catch (error) {
-      if (!isPrimaryPaymentLinksFlow && error instanceof PaymentApiError && error.status === 401) {
+      if (
+        error instanceof PaymentApiError &&
+        error.status === 401 &&
+        (!isPrimaryPaymentLinksFlow || sessionUser)
+      ) {
         tokenStore.clear()
+        setSessionUser(null)
         openOtpScreen('Sign in again to apply a coupon.')
         return
       }
@@ -821,9 +880,66 @@ export default function PaymentPage() {
     setCouponError('')
   }
 
+  function getCouponPreviewEndpoint() {
+    if (!isPrimaryPaymentLinksFlow) {
+      return '/billing/quote'
+    }
+
+    return sessionUser ? '/billing/payment-links/quote' : '/billing/plans/quote'
+  }
+
+  async function revalidatePaymentLinkCoupon(
+    requestPlanId: string,
+    validatedCouponCode: string,
+    customerPayload: PaymentLinkCustomerPayload
+  ) {
+    const quote = await apiFetch<BillingQuoteResponse>(
+      sessionUser ? '/billing/payment-links/quote' : '/billing/guest/payment-links/quote',
+      {
+        method: 'POST',
+        skipAuth: !sessionUser,
+        body: JSON.stringify({
+          planId: requestPlanId,
+          ...(!sessionUser ? customerPayload : {}),
+          couponCode: validatedCouponCode,
+        }),
+      }
+    )
+
+    if (selectedPlanIdRef.current !== requestPlanId) {
+      return false
+    }
+
+    setCouponQuote(quote)
+
+    if (quote.couponStatus === 'APPLIED' && quote.isValidCoupon) {
+      const appliedCode = quote.coupon?.code || validatedCouponCode
+      setAppliedCouponCode(appliedCode)
+      setCouponCode(appliedCode)
+      setCouponMessage(quote.message || 'Coupon applied.')
+      setCouponError('')
+      return true
+    }
+
+    setAppliedCouponCode('')
+    setCouponError(quote.message || 'Coupon is not valid for this customer.')
+    setStatusNote('Coupon validation failed.')
+    return false
+  }
+
   async function handlePayNow() {
     if (!selectedPlan) {
       setPageError('Select a plan before continuing.')
+      return
+    }
+
+    if (checkoutCourseOptions.length && !selectedCourse?.courseId) {
+      setBillingError('Select your course to continue.')
+      return
+    }
+
+    if (couponCode.trim() && !activeCouponCode) {
+      setCouponError('Apply the coupon before continuing, or clear it.')
       return
     }
 
@@ -859,7 +975,7 @@ export default function PaymentPage() {
         method: 'POST',
         body: JSON.stringify({
           planId: selectedPlan.planId,
-          couponCode: getCouponCodeForSubmit(couponCode),
+          couponCode: getCouponCodeForSubmit(activeCouponCode),
         }),
       })
 
@@ -899,15 +1015,35 @@ export default function PaymentPage() {
     setStatusNote('Creating your Razorpay payment link...')
 
     try {
-      const created = await apiFetch<PaymentLinkCreateResponse>('/billing/guest/payment-links', {
-        method: 'POST',
-        skipAuth: !sessionUser,
-        body: JSON.stringify({
-          planId: selectedPlan.planId,
-          ...customerPayload,
-          couponCode: getCouponCodeForSubmit(couponCode),
-        }),
-      })
+      const couponCodeForSubmit = getCouponCodeForSubmit(activeCouponCode)
+
+      if (couponCodeForSubmit) {
+        setStatusNote('Validating coupon for checkout...')
+        const isCouponStillValid = await revalidatePaymentLinkCoupon(
+          selectedPlan.planId,
+          couponCodeForSubmit,
+          customerPayload
+        )
+
+        if (!isCouponStillValid) {
+          setCheckoutLoading(false)
+          return
+        }
+      }
+
+      setStatusNote('Creating your Razorpay payment link...')
+      const created = await apiFetch<PaymentLinkCreateResponse>(
+        sessionUser ? '/billing/payment-links' : '/billing/guest/payment-links',
+        {
+          method: 'POST',
+          skipAuth: !sessionUser,
+          body: JSON.stringify({
+            planId: selectedPlan.planId,
+            ...(!sessionUser ? customerPayload : {}),
+            couponCode: couponCodeForSubmit,
+          }),
+        }
+      )
       const paymentUrl = getPaymentLinkUrl(created)
 
       if (!paymentUrl) {
@@ -916,7 +1052,7 @@ export default function PaymentPage() {
         return
       }
 
-      if (!created.order?.id || !created.checkout?.claimToken) {
+      if (!created.order?.id || (!sessionUser && !created.checkout?.claimToken)) {
         setPageError('Checkout session is incomplete. Please retry payment from pricing.')
         setCheckoutLoading(false)
         return
@@ -924,7 +1060,7 @@ export default function PaymentPage() {
 
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
-        window.sessionStorage.setItem(CHECKOUT_CLAIM_TOKEN_KEY, created.checkout.claimToken)
+        window.sessionStorage.setItem(CHECKOUT_CLAIM_TOKEN_KEY, created.checkout?.claimToken || '')
         window.sessionStorage.setItem(CHECKOUT_PHONE_KEY, sessionUser?.phoneE164 || customerPayload.phoneE164 || '')
         window.sessionStorage.setItem(CHECKOUT_EMAIL_KEY, sessionUser?.email || customerPayload.email || '')
         window.sessionStorage.setItem(
@@ -942,6 +1078,14 @@ export default function PaymentPage() {
       window.location.assign(paymentUrl)
     } catch (error) {
       const errorCode = getPaymentErrorCode(error)
+
+      if (error instanceof PaymentApiError && error.status === 401 && sessionUser) {
+        tokenStore.clear()
+        setSessionUser(null)
+        openOtpScreen('Sign in again to continue to payment.')
+        setCheckoutLoading(false)
+        return
+      }
 
       if (error instanceof PaymentApiError && error.status === 404) {
         setPageError('Selected plan is no longer available. Please return to pricing and choose again.')
@@ -1010,7 +1154,7 @@ export default function PaymentPage() {
       amount: order.amount || order.razorpay.amountPaise,
       currency: order.currency || order.razorpay.currency,
       name: 'Virtual Library',
-      description: `${order.course.title} • ${order.plan.name}`,
+      description: `${getCheckoutCourseTitle(order.course.title)} • ${order.plan.name}`,
       prefill: {
         name: order.user?.name,
         email: order.user?.email,
@@ -1077,7 +1221,7 @@ export default function PaymentPage() {
         setShowSuccessModal(true)
         setResult({
           title: 'Access unlocked',
-          message: `Payment confirmed for ${order.course.title}. You can continue in the app or stay on this page.`,
+          message: `Payment confirmed for ${getCheckoutCourseTitle(order.course.title)}. You can continue in the app or stay on this page.`,
           tone: 'success',
           returnUrl: verification.returnUrl,
         })
@@ -1279,6 +1423,24 @@ export default function PaymentPage() {
       return
     }
 
+    if (nextPaymentOrderId) {
+      setScreen('pending')
+      setResult({
+        title: 'Checking payment',
+        message: 'Razorpay returned a failure callback, but we are verifying the final payment status before marking it failed.',
+        tone: 'warning',
+      })
+      setStatusNote('Checking payment status...')
+
+      const resolved = await checkPaymentLinkStatus(nextPaymentOrderId, true)
+
+      if (!resolved) {
+        startPaymentLinkStatusPoll(nextPaymentOrderId)
+      }
+
+      return
+    }
+
     setScreen('failed')
     setResult({
       title: 'Payment failed',
@@ -1319,7 +1481,7 @@ export default function PaymentPage() {
   async function checkPaymentLinkStatus(orderId: string, manual: boolean) {
     if (!orderId) {
       setPageError('Payment order id is missing. Please reopen checkout from pricing.')
-      return
+      return false
     }
 
     if (manual) {
@@ -1330,10 +1492,14 @@ export default function PaymentPage() {
     try {
       const storedCheckoutSession = getStoredCheckoutSession()
       const claimToken = getCheckoutClaimToken()
-      if (isPrimaryPaymentLinksFlow && !claimToken) {
+      const isStoredSessionCheckout = storedCheckoutSession.sessionUser
+      const canCheckAuthenticatedStatus =
+        isStoredSessionCheckout || Boolean(tokenStore.getAccessToken()) || authMode === 'cookie'
+
+      if (isPrimaryPaymentLinksFlow && !claimToken && !canCheckAuthenticatedStatus) {
         setScreen('error')
         setPageError('Checkout session could not be verified. Please contact support with your payment id.')
-        return
+        return false
       }
       const status = claimToken
         ? await apiFetch<PaymentLinkStatusResponse>('/billing/guest/payment-links/status', {
@@ -1367,7 +1533,7 @@ export default function PaymentPage() {
         }
 
         await openAccountSetup(orderId)
-        return
+        return true
       }
 
       if (completed) {
@@ -1397,7 +1563,7 @@ export default function PaymentPage() {
           orderId,
           providerPaymentId: status.order?.providerPaymentId,
         })
-        return
+        return true
       }
 
       if (failed) {
@@ -1417,7 +1583,7 @@ export default function PaymentPage() {
           status: 'failed',
           orderId,
         })
-        return
+        return true
       }
 
       if (manual) {
@@ -1427,10 +1593,14 @@ export default function PaymentPage() {
           tone: 'warning',
         })
       }
+
+      return false
     } catch (error) {
       if (manual) {
         setPageError(getErrorMessage(error, 'Unable to check payment status. Please try again.'))
       }
+
+      return false
     }
   }
 
@@ -1706,15 +1876,33 @@ export default function PaymentPage() {
     void router.push('/')
   }
 
+  function getCheckoutCourseTitle(title?: string | null) {
+    if (shouldUseV2WebFallback) {
+      return 'Virtual Library Access'
+    }
+
+    return title || 'Virtual Library'
+  }
+
   function handleSelectCourseGroup(courseId: string) {
+    const nextCourse = checkoutCourseOptions.find((course) => course.courseId === courseId)
     const nextGroup = groupedPlans.find((group) => group.course.courseId === courseId)
 
-    if (!nextGroup) {
+    if (!nextCourse && !nextGroup) {
       return
     }
 
-    setSelectedCourse(nextGroup.course)
-    setSelectedPlanId(getDefaultPlanId(nextGroup.plans))
+    const requestedDurationMonths = selectedPlan?.durationMonths || getQueryNumber(router.query.durationMonths)
+
+    setSelectedCourse(nextCourse || nextGroup?.course || null)
+    setSelectedCourseChoice(courseId)
+
+    if (nextGroup) {
+      setSelectedPlanId(getDefaultPlanId(nextGroup.plans, undefined, requestedDurationMonths))
+    }
+
+    setPageError('')
+    setBillingError('')
   }
 
   async function handleSelectPublicPlan(plan: BillingPlan) {
@@ -1815,7 +2003,7 @@ export default function PaymentPage() {
       return result?.returnUrl ? 'Return to app' : 'Payment pending'
     }
 
-    return checkoutLoading ? 'Opening Razorpay...' : 'Start Learning'
+    return checkoutLoading ? 'Opening Razorpay...' : 'Pay & Start Learning'
   }
 
   function isPrimaryActionDisabled() {
@@ -1989,8 +2177,8 @@ export default function PaymentPage() {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-end">
             <SectionHeading
               eyebrow="Plans"
-              title="Choose your NEET-PG access"
-              description="Select a plan now. You can apply a coupon on the next step before opening Razorpay."
+              title="Choose your Virtual Library access"
+              description="Select a duration now. You can apply a coupon on the next step before opening Razorpay."
             />
 
             {sessionUser && <SessionCustomerCard user={sessionUser} />}
@@ -2017,33 +2205,36 @@ export default function PaymentPage() {
   function renderCheckoutForm() {
     const disabled = checkoutLoading || screen === 'processing' || screen === 'pending'
     const showContactFields = !isSessionPaymentLinkCheckout
+    const selectedCourseId = selectedCourse?.courseId || selectedCoursePreview?.courseId || ''
 
     return (
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="space-y-3">
         <form
           onSubmit={handleCheckoutFormSubmit}
-          className="rounded-3xl border border-purple-100 bg-white p-4 text-slate-950 shadow-[0_18px_48px_rgba(107,33,168,0.10)] sm:p-5"
+          className="space-y-2.5 text-[#211536]"
         >
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b21a8]">
-                Checkout
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
+          <section className="rounded-[22px] border border-[#f1eafc] bg-white p-3.5 shadow-[0_18px_42px_rgba(61,45,99,0.09)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#a49ab7]">
                 {showContactFields ? 'Contact details' : 'Payment details'}
-              </h1>
+              </p>
+              <p className="text-xs font-semibold text-[#7c3ff0]">Razorpay</p>
             </div>
-            <p className="rounded-full bg-purple-50 px-3 py-1.5 text-xs font-semibold text-[#6b21a8]">
-              Razorpay
-            </p>
-          </div>
 
-          {showContactFields ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2">
+            <div className="grid gap-2">
+              <CourseSelectorField
+                courses={checkoutCourseOptions}
+                disabled={disabled}
+                label="Select your course"
+                onChange={handleSelectCourseGroup}
+                value={selectedCourseId}
+              />
+
+              {showContactFields ? (
                 <InputField
                   label="Mobile number"
                   hint="+91"
+                  placeholder="10-digit number"
                   value={phone}
                   onChange={(value) => {
                     setPhone(value.replace(/\D/g, '').slice(0, 10))
@@ -2053,41 +2244,37 @@ export default function PaymentPage() {
                   inputMode="numeric"
                   disabled={otpLoading || disabled}
                 />
-              </div>
-
-              {((screen === 'otp' && otpRequested) || paymentPhoneOtpRequired) && (
-                <div className="sm:col-span-2">
-                  <InputField
-                    label="OTP"
-                    value={otp}
-                    onChange={(value) => {
-                      setOtp(value.replace(/\D/g, '').slice(0, 6))
-                      setAuthError('')
-                    }}
-                    inputMode="numeric"
-                    disabled={otpLoading || checkoutLoading}
-                  />
-                </div>
+              ) : (
+                <SessionCustomerCard user={sessionUser} />
               )}
 
-              <div className="sm:col-span-2">
+              {((screen === 'otp' && otpRequested) || paymentPhoneOtpRequired) && (
                 <InputField
-                  label="Email"
+                  label="OTP"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(value) => {
+                    setOtp(value.replace(/\D/g, '').slice(0, 6))
+                    setAuthError('')
+                  }}
+                  inputMode="numeric"
+                  disabled={otpLoading || checkoutLoading}
+                />
+              )}
+
+              {showContactFields && (
+                <InputField
+                  label="Email address"
+                  placeholder="you@email.com"
                   value={billingDetails.email}
                   onChange={(value) => updateBillingField('email', value)}
                   inputMode="email"
                   disabled={disabled}
                 />
-              </div>
+              )}
             </div>
-          ) : (
-            <div className="mt-5">
-              <SessionCustomerCard user={sessionUser} />
-            </div>
-          )}
 
-          {checkoutPricing && selectedPlan && (
-            <div className="mt-6">
+            {checkoutPricing && selectedPlan && (
               <CouponSection
                 appliedCode={activeCouponCode}
                 couponCode={couponCode}
@@ -2108,10 +2295,10 @@ export default function PaymentPage() {
                 onRemove={handleRemoveCoupon}
                 pricing={checkoutPricing}
               />
-            </div>
-          )}
+            )}
+          </section>
 
-          <div className="mt-5 space-y-3">
+          <div className="space-y-2.5">
             {authError && <MessageBanner tone="danger">{authError}</MessageBanner>}
             {billingError && <MessageBanner tone="danger">{billingError}</MessageBanner>}
             {pageError && <MessageBanner tone="danger">{pageError}</MessageBanner>}
@@ -2123,11 +2310,11 @@ export default function PaymentPage() {
             )}
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="space-y-2.5">
             <button
               type="submit"
               disabled={isPrimaryActionDisabled()}
-              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#6b21a8] px-5 py-3 text-sm font-bold text-white shadow-[0_16px_32px_rgba(107,33,168,0.22)] transition hover:bg-[#581c87] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#883bea_0%,#9c55ef_100%)] px-5 py-3 text-sm font-black text-white shadow-[0_18px_34px_rgba(126,57,224,0.30)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {getPrimaryActionLabel()}
             </button>
@@ -2153,6 +2340,20 @@ export default function PaymentPage() {
               </button>
             )}
           </div>
+
+          <PaymentTrustBadges />
+
+          <div className="rounded-[14px] border border-[#ffd797] bg-[#fff7e8] px-4 py-2.5 text-xs leading-5 text-[#9a4a00]">
+            <div className="flex items-start gap-2">
+              <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#f2a223]" />
+              <p>
+                All payments are <span className="font-bold">non-refundable</span>. Please review your plan before proceeding. For queries,{' '}
+                <a href="/contact" className="font-semibold underline decoration-[#c56a10]/40 underline-offset-2">
+                  contact support
+                </a>.
+              </p>
+            </div>
+          </div>
         </form>
 
         {renderPlanSummary()}
@@ -2161,42 +2362,43 @@ export default function PaymentPage() {
   }
 
   function renderPlanSummary() {
-    const planTitle = selectedPlan ? formatPlanTitle(selectedPlan) : 'Selected plan'
-    const durationLabel = selectedPlan ? formatPlanDuration(selectedPlan.durationMonths) : ''
-    const totalLabel = checkoutPricing
-      ? formatCurrency(checkoutPricing.finalAmountPaise, checkoutPricing.currency)
-      : '-'
-    const baseLabel = checkoutPricing
-      ? formatCurrency(checkoutPricing.baseAmountPaise, checkoutPricing.currency)
-      : '-'
+    const durationLabel = selectedPlan ? formatPlanDuration(selectedPlan.durationMonths) : 'Selected Plan'
+    const finalAmountPaise = checkoutPricing?.finalAmountPaise ?? selectedPlan?.amountPaise ?? 0
+    const currency = checkoutPricing?.currency || selectedPlan?.currency || 'INR'
+    const monthlyAmountPaise = selectedPlan
+      ? Math.round(finalAmountPaise / Math.max(selectedPlan.durationMonths, 1))
+      : 0
+    const metrics = selectedPlan ? getPlanMetrics(selectedPlan, basePlan) : null
+    const savingsPercent = selectedPlan ? getSavingsPercent(selectedPlan, metrics, checkoutPricing) : 0
 
     return (
-      <aside className="rounded-3xl border border-[#6b21a8]/15 bg-[#6b21a8] p-5 text-white shadow-[0_18px_48px_rgba(107,33,168,0.18)]">
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#d3b8ff]">
-          Plan summary
-        </p>
-        <h2 className="mt-3 text-3xl font-bold tracking-[-0.04em]">{planTitle}</h2>
-        {durationLabel && <p className="mt-1 text-sm font-medium text-white/70">{durationLabel}</p>}
+      <aside className="relative overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_86%_7%,rgba(188,114,255,0.42)_0,rgba(188,114,255,0.24)_18%,transparent_19%),linear-gradient(145deg,#8c39e8_0%,#6d22d3_54%,#651fd2_100%)] p-4 text-white shadow-[0_28px_46px_rgba(105,35,204,0.30)]">
+        <div className="pointer-events-none absolute -bottom-14 -left-8 h-32 w-32 rounded-full bg-white/7" />
+        <div className="relative">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/48">
+            Plan summary
+          </p>
+          <h2 className="mt-1.5 text-2xl font-black leading-none tracking-[-0.04em]">{durationLabel}</h2>
+          <p className="mt-1.5 text-xs font-semibold text-white/64">Full access · Billed once</p>
 
-        <div className="mt-5 space-y-3 border-y border-white/14 py-5">
-          <PlanFeature>Access to 7000+ PYQs</PlanFeature>
-          <PlanFeature>Complete handwritten notes</PlanFeature>
-          <PlanFeature>Custom test creation</PlanFeature>
-          <PlanFeature>Mobile app access after payment</PlanFeature>
-        </div>
+          <div className="mt-4 space-y-1 border-y border-white/14 py-3">
+            {PAYMENT_PLAN_FEATURES.map((feature) => (
+              <PlanFeature key={feature}>{feature}</PlanFeature>
+            ))}
+          </div>
 
-        <div className="mt-5 space-y-2.5">
-          <SummaryPriceLine label="Subtotal" value={baseLabel} />
-          {checkoutPricing && checkoutPricing.discountAmountPaise > 0 && (
-            <SummaryPriceLine
-              label="Discount"
-              value={`-${formatCurrency(checkoutPricing.discountAmountPaise, checkoutPricing.currency)}`}
-              tone="success"
-            />
-          )}
-          <div className="flex items-center justify-between gap-4 pt-2">
-            <span className="text-sm font-bold text-white">Due today</span>
-            <span className="text-3xl font-bold tracking-[-0.04em] text-white">{totalLabel}</span>
+          <div className="mt-3 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold text-white/42">Per month</p>
+              <p className="mt-1 text-xl font-black leading-none tracking-[-0.04em]">
+                {formatCompactCurrency(monthlyAmountPaise, currency)}/mo
+              </p>
+            </div>
+            {savingsPercent > 0 && (
+              <span className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+                Save {savingsPercent}%
+              </span>
+            )}
           </div>
         </div>
       </aside>
@@ -2204,7 +2406,9 @@ export default function PaymentPage() {
   }
 
   function renderSuccessPage() {
-    const courseTitle = selectedCoursePreview?.title || selectedCourse?.title || activeGroup?.course.title || 'Virtual Library'
+    const courseTitle = getCheckoutCourseTitle(
+      selectedCoursePreview?.title || selectedCourse?.title || activeGroup?.course.title || 'Virtual Library'
+    )
 
     return (
       <section className="mx-auto grid max-w-5xl items-center gap-5 py-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:py-10">
@@ -2235,7 +2439,7 @@ export default function PaymentPage() {
           <div className="mt-6 space-y-3 border-y border-white/14 py-5">
             <PlanFeature>Course access is active</PlanFeature>
             <PlanFeature>Mobile app access is enabled</PlanFeature>
-            <PlanFeature>Study rooms, PYQs, notes, and custom tests are ready</PlanFeature>
+            <PlanFeature>Study rooms, focus tools, notes, and progress insights are ready</PlanFeature>
           </div>
           <a
             href="/v2/neet-pg/access"
@@ -2437,53 +2641,51 @@ export default function PaymentPage() {
         />
       )}
 
-      <div className="min-h-screen bg-[#f8f7fb] px-4 py-4 text-slate-900 sm:px-6">
-        <div className="mx-auto flex min-h-full max-w-5xl flex-col">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleBack}
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-purple-100 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-[#6b21a8]/40"
-            >
-              <ChevronLeftIcon className="h-3.5 w-3.5" />
-              Back
-            </button>
+      <div className="min-h-screen bg-white text-[#211536]">
+        <div className="mx-auto w-full max-w-[430px] px-4 pb-4 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="inline-flex h-7 items-center gap-1.5 rounded-full px-1 text-sm font-medium text-[#6f667d] transition hover:text-[#6b21a8]"
+              >
+                <ChevronLeftIcon className="h-3.5 w-3.5" />
+                Back
+              </button>
 
-            <div className="min-w-0 rounded-full border border-purple-100 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#6b21a8] shadow-sm">
-              <span className="block truncate">
-                {selectedCoursePreview?.title || activeGroup?.course.title || 'Virtual Library'}
-              </span>
+              <div className="min-w-0 rounded-full bg-[#f0e3ff] px-3 py-1 text-[11px] font-black text-[#8441ee]">
+                <span className="block truncate">
+                  {selectedPlan ? `${formatPlanDuration(selectedPlan.durationMonths)} Plan` : 'Selected Plan'}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#6b21a8]">
-              Secure checkout
+            <div className="mt-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#08a76b]">
+                Secure checkout
               </p>
-              <h1 className="mt-1 text-3xl font-semibold leading-none tracking-[-0.04em] text-slate-950 sm:text-4xl">
+              <h1 className="mt-1 text-[28px] font-black leading-none tracking-[-0.04em] text-[#171021]">
                 Payment
               </h1>
             </div>
-          </div>
 
-          <main className="mt-4 min-h-0 flex-1">
-            {renderBodyContent()}
-          </main>
+            <main className="mt-3">
+              {renderBodyContent()}
+            </main>
 
-          {renderFooterAction()}
+            {renderFooterAction()}
 
-          <div className="mt-3 flex flex-wrap justify-center gap-4 pb-1 text-[11px] font-medium text-slate-400">
-            <a href="/terms-and-conditions" className="transition hover:text-[#6b21a8]">
-              Terms
-            </a>
-            <a href="/privacy-policy" className="transition hover:text-[#6b21a8]">
-              Privacy
-            </a>
-            <a href="/refund-policy" className="transition hover:text-[#6b21a8]">
-              Refunds
-            </a>
-          </div>
+            <div className="mt-4 flex flex-wrap justify-center gap-5 pb-1 text-[11px] font-medium text-[#9b93aa]">
+              <a href="/terms-and-conditions" className="transition hover:text-[#6b21a8]">
+                Terms
+              </a>
+              <a href="/privacy-policy" className="transition hover:text-[#6b21a8]">
+                Privacy
+              </a>
+              <a href="/refund-policy" className="transition hover:text-[#6b21a8]">
+                Refunds
+              </a>
+            </div>
         </div>
       </div>
 
@@ -2533,44 +2735,67 @@ function CouponSection({
   onRemove: () => void
   pricing: BillingPricing
 }) {
+  const [expanded, setExpanded] = useState(Boolean(couponCode || appliedCode || error || message))
   const hasAppliedCoupon = Boolean(appliedCode)
   const canApply = Boolean(couponCode.trim()) && !disabled && !hasAppliedCoupon
+  const applyCoupon = () => {
+    if (canApply && !loading) {
+      onApply()
+    }
+  }
+
+  useEffect(() => {
+    if (couponCode || appliedCode || error || message) {
+      setExpanded(true)
+    }
+  }, [appliedCode, couponCode, error, message])
 
   return (
-    <section className="rounded-2xl border border-purple-100 bg-white px-3 py-3 shadow-[0_10px_24px_rgba(107,33,168,0.05)]">
-      <form
-        className="flex items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-
-          if (canApply) {
-            onApply()
-          }
-        }}
+    <section className="mt-3 border-t border-[#f0edf5] pt-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center gap-2 text-left text-xs font-semibold text-[#681ee6] transition hover:text-[#4f15bd]"
       >
-        <label className="min-w-0 flex-1">
-          <span className="mb-2 block text-sm font-medium text-slate-700">Coupon code</span>
-          <input
-            type="text"
-            value={couponCode}
-            onChange={(event) => onChange(event.target.value)}
-            disabled={disabled || hasAppliedCoupon}
-            className="h-11 w-full rounded-2xl border border-purple-100 bg-[#fbfaff] px-3 text-sm font-semibold uppercase tracking-[0.08em] text-slate-900 outline-none transition focus:border-[#6b21a8] focus:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-            autoComplete="off"
-          />
-        </label>
+        <TagIcon className="h-4 w-4 shrink-0" />
+        <span>Have a coupon code?</span>
+        <span className="font-medium text-[#9b93aa]">(Optional)</span>
+      </button>
 
-        <button
-          type="submit"
-          disabled={!canApply || loading}
-          className="h-11 shrink-0 rounded-2xl bg-[#6b21a8] px-4 text-sm font-semibold text-white shadow-[0_12px_22px_rgba(107,33,168,0.16)] transition hover:bg-[#581c87] disabled:cursor-not-allowed disabled:opacity-55"
-        >
-          {loading ? 'Applying...' : 'Apply'}
-        </button>
-      </form>
+      {expanded && (
+        <div className="mt-2.5 flex items-end gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Coupon code</span>
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  applyCoupon()
+                }
+              }}
+              disabled={disabled || hasAppliedCoupon}
+              className="h-10 w-full rounded-[13px] border border-[#e9e2f3] bg-white px-3 text-sm font-bold uppercase tracking-[0.08em] text-[#211536] outline-none transition placeholder:text-[#c9c2d3] focus:border-[#8b3fea] disabled:cursor-not-allowed disabled:opacity-70"
+              placeholder="COUPON"
+              autoComplete="off"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={applyCoupon}
+            disabled={!canApply || loading}
+            className="h-10 shrink-0 rounded-[13px] bg-[#6d22d3] px-4 text-sm font-black text-white shadow-[0_12px_22px_rgba(107,33,168,0.16)] transition hover:bg-[#581cba] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {loading ? 'Applying...' : 'Apply'}
+          </button>
+        </div>
+      )}
 
       {hasAppliedCoupon && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-emerald-900">{appliedCode}</p>
             {message && <p className="mt-0.5 text-xs text-emerald-700">{message}</p>}
@@ -2589,18 +2814,16 @@ function CouponSection({
       {!hasAppliedCoupon && error && <p className="mt-3 text-xs font-medium text-rose-600">{error}</p>}
       {!hasAppliedCoupon && !error && message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}
 
-      <div className="mt-4 space-y-1.5 border-t border-purple-50 pt-3">
+      <div className="mt-3 space-y-1.5 border-t border-[#f0edf5] pt-3">
         <PriceLine label="Subtotal" value={formatCurrency(pricing.baseAmountPaise, pricing.currency)} />
-        {pricing.discountAmountPaise > 0 && (
-          <PriceLine
-            label="Discount"
-            value={`-${formatCurrency(pricing.discountAmountPaise, pricing.currency)}`}
-            tone="success"
-          />
-        )}
-        <div className="flex items-center justify-between pt-2">
-          <span className="text-sm font-semibold text-slate-950">Total</span>
-          <span className="text-xl font-bold tracking-[-0.03em] text-slate-950">
+        <PriceLine
+          label="Discount"
+          value={`- ${formatCurrency(pricing.discountAmountPaise, pricing.currency)}`}
+          tone="success"
+        />
+        <div className="mt-3 flex items-center justify-between border-t border-[#ece7f1] pt-3">
+          <span className="text-sm font-black text-[#211536]">Total due today</span>
+          <span className="text-xl font-black tracking-[-0.04em] text-[#7b2fee]">
             {formatCurrency(pricing.finalAmountPaise, pricing.currency)}
           </span>
         </div>
@@ -2619,10 +2842,69 @@ function PriceLine({
   value: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className={cn('font-semibold text-slate-700', tone === 'success' && 'text-emerald-700')}>
+    <div className="flex items-center justify-between gap-3 text-xs">
+      <span className="text-[#7d758b]">{label}</span>
+      <span className={cn('font-semibold text-[#51465f]', tone === 'success' && 'text-emerald-600')}>
         {value}
+      </span>
+    </div>
+  )
+}
+
+function CourseSelectorField({
+  courses,
+  disabled,
+  label,
+  onChange,
+  value,
+}: {
+  courses: CourseSummary[]
+  disabled?: boolean
+  label: string
+  onChange: (courseId: string) => void
+  value: string
+}) {
+  const hasOptions = courses.length > 0
+
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled || !hasOptions}
+          className="h-10 w-full appearance-none truncate rounded-[14px] border border-[#e8e2ee] bg-white px-3 pr-9 text-sm font-semibold text-[#211536] outline-none transition focus:border-[#8b3fea] disabled:cursor-not-allowed disabled:bg-[#fbf9fd] disabled:text-[#9a90ae]"
+        >
+          <option value="" disabled>
+            {hasOptions ? 'Select your course' : 'Course unavailable'}
+          </option>
+          {courses.map((course) => (
+            <option key={course.courseId} value={course.courseId}>
+              {course.title || 'Virtual Library Access'}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a90ae]" />
+      </div>
+    </label>
+  )
+}
+
+function PaymentTrustBadges() {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-1 py-1 text-[11px] font-medium text-[#9a90ae]">
+      <span className="inline-flex items-center gap-1.5">
+        <LockIcon className="h-3.5 w-3.5 text-[#8b3fea]" />
+        Secure payment
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <BoltIcon className="h-3.5 w-3.5 text-[#8b3fea]" />
+        Instant access
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <PhoneIcon className="h-3.5 w-3.5 text-[#8b3fea]" />
+        Android & iOS
       </span>
     </div>
   )
@@ -2649,11 +2931,11 @@ function SummaryPriceLine({
 
 function PlanFeature({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#d3b8ff] text-[#d3b8ff]">
-        <CheckIcon className="h-3 w-3" />
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/18 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+        <CheckIcon className="h-2.5 w-2.5" />
       </span>
-      <p className="text-sm leading-5 text-white/82">{children}</p>
+      <p className="text-[11px] leading-4 text-white/84">{children}</p>
     </div>
   )
 }
@@ -2700,12 +2982,12 @@ function SessionCustomerCard({ user }: { user: PaymentSessionUser | null }) {
   const emailLabel = user?.email ? maskEmail(user.email) : ''
 
   return (
-    <div className="rounded-2xl border border-purple-100 bg-[#fbf9ff] px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b21a8]">
+    <div className="rounded-[14px] border border-[#e8e2ee] bg-white px-3 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#7b2fee]">
         Signed in
       </p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{phoneLabel}</p>
-      {emailLabel && <p className="mt-0.5 text-xs font-medium text-slate-500">{emailLabel}</p>}
+      <p className="mt-1 text-sm font-semibold text-[#211536]">{phoneLabel}</p>
+      {emailLabel && <p className="mt-0.5 text-xs font-medium text-[#7d758b]">{emailLabel}</p>}
     </div>
   )
 }
@@ -2852,9 +3134,9 @@ function InputField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
-      <div className="flex items-center rounded-2xl border border-purple-100 bg-white px-3 shadow-[0_8px_18px_rgba(107,33,168,0.05)] focus-within:border-[#6b21a8]">
-        {hint && <span className="mr-3 text-sm font-semibold text-slate-400">{hint}</span>}
+      <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">{label}</span>
+      <div className="flex h-10 items-center rounded-[14px] border border-[#e8e2ee] bg-white px-3 transition focus-within:border-[#8b3fea] disabled:opacity-70">
+        {hint && <span className="mr-3 border-r border-[#eee8f4] pr-3 text-sm font-semibold text-[#9c94a9]">{hint}</span>}
         <input
           type="text"
           inputMode={inputMode}
@@ -2862,7 +3144,7 @@ function InputField({
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder || undefined}
           disabled={disabled}
-          className="w-full border-0 bg-transparent px-0 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0"
+          className="w-full min-w-0 border-0 bg-transparent px-0 py-2 text-sm font-medium text-[#211536] outline-none placeholder:text-[#c9c2d3] focus:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
         />
       </div>
     </label>
@@ -2879,7 +3161,7 @@ function MessageBanner({
   return (
     <div
       className={cn(
-        'rounded-2xl border px-4 py-3 text-sm',
+        'rounded-[14px] border px-4 py-3 text-sm',
         tone === 'danger' && 'border-rose-200 bg-rose-50 text-rose-700',
         tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
         tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-700'
@@ -2911,6 +3193,14 @@ function ChevronLeftIcon({ className }: { className?: string }) {
   )
 }
 
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M5.5 7.5L10 12l4.5-4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
 function ArrowRightIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -2924,6 +3214,51 @@ function CheckIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
       <path d="M5 10.5l3.2 3.2L15 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M4.5 5.5v4.1c0 .35.14.68.39.92l5.1 5.1a1.55 1.55 0 002.2 0l3.43-3.43a1.55 1.55 0 000-2.2l-5.1-5.1a1.3 1.3 0 00-.92-.39H5.5a1 1 0 00-1 1z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M7.5 7.5h.01" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+    </svg>
+  )
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M6 8V6.5a4 4 0 018 0V8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M5.5 8h9A1.5 1.5 0 0116 9.5v5A1.5 1.5 0 0114.5 16h-9A1.5 1.5 0 014 14.5v-5A1.5 1.5 0 015.5 8z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function BoltIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M10.8 2.9L5.7 10h4l-.5 7.1 5.1-8.2h-4l.5-6z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M7 3.5h6A1.5 1.5 0 0114.5 5v10A1.5 1.5 0 0113 16.5H7A1.5 1.5 0 015.5 15V5A1.5 1.5 0 017 3.5z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M9 14h2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M10 3.2l5 1.9v3.7c0 3.15-1.88 5.98-5 7.48-3.12-1.5-5-4.33-5-7.48V5.1l5-1.9z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M10 7.2v3.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+      <path d="M10 13.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
     </svg>
   )
 }
@@ -3055,6 +3390,23 @@ function getPlanMetrics(plan: BillingPlan, basePlan: BillingPlan | null): PlanMe
   }
 }
 
+function getSavingsPercent(
+  plan: BillingPlan,
+  metrics: PlanMetrics | null,
+  pricing: BillingPricing | null
+) {
+  const compareAmountPaise = pricing && pricing.discountAmountPaise > 0
+    ? pricing.baseAmountPaise
+    : metrics?.compareAmountPaise
+  const finalAmountPaise = pricing?.finalAmountPaise ?? plan.amountPaise
+
+  if (!compareAmountPaise || compareAmountPaise <= finalAmountPaise) {
+    return 0
+  }
+
+  return Math.max(1, Math.round(((compareAmountPaise - finalAmountPaise) / compareAmountPaise) * 100))
+}
+
 function getExplicitCompareAmount(plan: BillingPlan) {
   const rawPlan = plan as BillingPlan & {
     compareAmountPaise?: number | null
@@ -3063,6 +3415,10 @@ function getExplicitCompareAmount(plan: BillingPlan) {
   }
 
   return rawPlan.compareAmountPaise || rawPlan.originalAmountPaise || rawPlan.mrpAmountPaise || null
+}
+
+function formatCompactCurrency(amountPaise: number, currency: string) {
+  return formatCurrency(amountPaise, currency).replace(/\.00$/, '')
 }
 
 function getPlanTag(plan: BillingPlan, popularPlanId: string) {
@@ -3097,6 +3453,12 @@ function getDefaultPlanId(plans: BillingPlan[], requestedPlanId?: string, reques
     plans[0]?.planId ||
     ''
   )
+}
+
+function sortCourseOptions(courses: CourseSummary[]) {
+  return [...courses].sort((left, right) => {
+    return (left.displayOrder || 0) - (right.displayOrder || 0)
+  })
 }
 
 function formatPlanDuration(durationMonths: number) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -8,6 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const resetSuccess = router.query.reset === 'success';
 
   useEffect(() => {
     // Check if already authenticated
@@ -77,6 +79,12 @@ export default function LoginPage() {
               </div>
             )}
 
+            {resetSuccess && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm">
+                Your password has been updated. You can now sign in with your new password.
+              </div>
+            )}
+
             {/* Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -97,9 +105,14 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                  Password
-                </label>
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                    Password
+                  </label>
+                  <Link href="/forgot-password" className="text-xs font-semibold text-purple-600 hover:text-purple-800">
+                    Forgot password?
+                  </Link>
+                </div>
                 <input
                   id="password"
                   name="password"
@@ -147,4 +160,3 @@ export default function LoginPage() {
     </>
   );
 }
-

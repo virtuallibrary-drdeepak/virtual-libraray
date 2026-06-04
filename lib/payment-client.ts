@@ -197,6 +197,11 @@ export type CheckoutOtpVerifyResponse = {
   courseAccess?: any
 }
 
+export type PasswordResetResponse = {
+  ok: boolean
+  message?: string
+}
+
 export class PaymentApiError extends Error {
   status: number
   body: any
@@ -277,6 +282,25 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}) {
   return apiFetchInternal<T>(path, init, true)
 }
 
+export async function authPost<TResponse>(path: string, body: unknown): Promise<TResponse> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    credentials: 'omit',
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new PaymentApiError(data?.message || 'Request failed', response.status, data)
+  }
+
+  return data as TResponse
+}
+
 async function apiFetchInternal<T>(path: string, init: ApiFetchInit = {}, allowRefresh = true) {
   const { skipAuth, ...fetchInit } = init
   const accessToken = skipAuth ? null : tokenStore.getAccessToken()
@@ -342,6 +366,19 @@ export async function verifyOtp(phoneInput: string, otp: string) {
       identifier: phone.e164,
       code: otp.trim(),
     }),
+  })
+}
+
+export async function requestPasswordReset(email: string) {
+  return authPost<PasswordResetResponse>('/auth/forgot-password', {
+    email,
+  })
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  return authPost<PasswordResetResponse>('/auth/reset-password', {
+    token,
+    newPassword,
   })
 }
 
