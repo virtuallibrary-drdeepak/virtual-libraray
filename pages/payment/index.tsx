@@ -26,6 +26,9 @@ import {
   PublicBillingPlansResponse,
   requestOtp,
   tokenStore,
+  TrialOffer,
+  TrialQuoteResponse,
+  TrialVerifyResponse,
   verifyOtp,
 } from '@/lib/payment-client'
 import {
@@ -38,6 +41,7 @@ type ScreenState =
   | 'planSelect'
   | 'otp'
   | 'course'
+  | 'trial'
   | 'ready'
   | 'processing'
   | 'pending'
@@ -48,6 +52,8 @@ type ScreenState =
 type AuthMode = 'unknown' | 'cookie' | 'bearer' | 'unauthenticated'
 type AccountSetupStep = 'profile' | 'course'
 type AccountGender = 'FEMALE' | 'MALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | ''
+type TrialOtpChannel = 'sms' | 'whatsapp'
+type TrialAction = 'quote' | 'send' | 'verify'
 
 type ResultState = {
   title: string
@@ -94,6 +100,8 @@ const CHECKOUT_EMAIL_KEY = 'checkoutEmail'
 const CHECKOUT_ACCOUNT_EXISTS_KEY = 'checkoutAccountExists'
 const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
+const MOBILE_CHECKOUT_CONTEXT_KEY = 'vl_mobile_checkout_context'
+const MOBILE_CHECKOUT_CONTEXT_TTL_MS = 30 * 60 * 1000
 const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
 const APP_STORE_HREF = 'https://apps.apple.com/'
 const PAYMENT_PLAN_FEATURES = [
@@ -105,6 +113,42 @@ const PAYMENT_PLAN_FEATURES = [
   'Leaderboard & Study Streaks',
   'Mobile app access (Android & iOS)',
 ]
+const MOBILE_SOURCE_VALUES = new Set([
+  'android',
+  'app',
+  'expo',
+  'ios',
+  'mobile',
+  'mobile-app',
+  'native',
+  'react-native',
+  'rn',
+])
+const MOBILE_ACCESS_TOKEN_QUERY_KEYS = [
+  'accessToken',
+  'access_token',
+  'appAccessToken',
+  'authToken',
+  'mobileAccessToken',
+  'token',
+  'vlAccessToken',
+]
+const MOBILE_REFRESH_TOKEN_QUERY_KEYS = [
+  'refresh',
+  'refreshToken',
+  'refresh_token',
+  'appRefreshToken',
+  'mobileRefreshToken',
+  'vlRefreshToken',
+]
+const MOBILE_CONTEXT_QUERY_KEYS = [
+  'app',
+  'client',
+  'from',
+  'platform',
+  'source',
+]
+const DEFAULT_PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || '2026-06-04'
 
 export default function PaymentPage() {
   const router = useRouter()
@@ -115,6 +159,8 @@ export default function PaymentPage() {
   const [authMode, setAuthMode] = useState<AuthMode>('unknown')
   const [screen, setScreen] = useState<ScreenState>('booting')
   const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [trialOffer, setTrialOffer] = useState<TrialOffer | null>(null)
+  const [isMobileCheckout, setIsMobileCheckout] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [pageError, setPageError] = useState('')
   const [authError, setAuthError] = useState('')
@@ -160,7 +206,17 @@ export default function PaymentPage() {
   const [accountGender, setAccountGender] = useState<AccountGender>('')
   const [accountTermsAccepted, setAccountTermsAccepted] = useState(false)
   const [accountError, setAccountError] = useState('')
-  const [privacyPolicyVersion] = useState('')
+  const [trialName, setTrialName] = useState('')
+  const [trialGender, setTrialGender] = useState<AccountGender>('')
+  const [trialTermsAccepted, setTrialTermsAccepted] = useState(false)
+  const [trialOtp, setTrialOtp] = useState('')
+  const [trialOtpStarted, setTrialOtpStarted] = useState(false)
+  const [trialOtpChannel, setTrialOtpChannel] = useState<TrialOtpChannel>('sms')
+  const [trialLoading, setTrialLoading] = useState(false)
+  const [trialAction, setTrialAction] = useState<TrialAction | null>(null)
+  const [trialError, setTrialError] = useState('')
+  const [trialMessage, setTrialMessage] = useState('')
+  const [privacyPolicyVersion] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
 
   const planIdFromQuery = getQueryParam(router.query.planId)
   const paymentStatusFromQuery = getQueryParam(router.query.paymentStatus)
@@ -176,6 +232,9 @@ export default function PaymentPage() {
     () => plans.find((plan) => plan.planId === selectedPlanId) || null,
     [plans, selectedPlanId]
   )
+  const shouldShowTrialOffer = isMobileCheckout && !isLegacyCheckoutFlow && Boolean(trialOffer)
+  const trialCourseTitle = getCheckoutCourseTitle(trialOffer?.course?.title || selectedCourse?.title || selectedPlan?.course?.title)
+  const isTrialSuccess = result?.title.toLowerCase().includes('trial') || false
   const checkoutPricing = useMemo(
     () => getCheckoutPricing(selectedPlan, couponQuote),
     [couponQuote, selectedPlan]
@@ -301,6 +360,10 @@ export default function PaymentPage() {
     setCouponMessage('')
     setCouponError('')
     setPaymentPhoneOtpRequired(false)
+    setTrialOtp('')
+    setTrialOtpStarted(false)
+    setTrialError('')
+    setTrialMessage('')
   }, [selectedPlanId])
 
   useEffect(() => {
@@ -389,6 +452,9 @@ export default function PaymentPage() {
       setSessionUser(user)
       if (user) {
         setAuthMode(tokenStore.getAccessToken() ? 'bearer' : 'cookie')
+        if (user.name) {
+          setTrialName((current) => current || user.name || '')
+        }
       }
 
       return user
@@ -398,7 +464,66 @@ export default function PaymentPage() {
     }
   }
 
+  function syncMobileCheckoutContext() {
+    const hydratedTokens = hydrateMobileTokensFromQuery()
+    const mobileCheckout = hydratedTokens || isMobileCheckoutRequest(router.query)
+
+    if (mobileCheckout) {
+      rememberMobileCheckoutContext()
+    }
+
+    setIsMobileCheckout(mobileCheckout)
+
+    return mobileCheckout
+  }
+
+  function hydrateMobileTokensFromQuery() {
+    const accessToken = getFirstQueryValue(router.query, MOBILE_ACCESS_TOKEN_QUERY_KEYS)
+    const refreshToken = getFirstQueryValue(router.query, MOBILE_REFRESH_TOKEN_QUERY_KEYS)
+
+    if (!accessToken && !refreshToken) {
+      return false
+    }
+
+    if (accessToken) {
+      tokenStore.setAccessToken(accessToken)
+    }
+
+    if (refreshToken) {
+      tokenStore.setRefreshToken(refreshToken)
+    }
+
+    stripMobileTokenQueryParams()
+    postMobileEvent('MOBILE_TOKEN_RECEIVED')
+
+    return true
+  }
+
+  function stripMobileTokenQueryParams() {
+    const sanitizedQuery = { ...router.query }
+    let changed = false
+
+    for (const key of [...MOBILE_ACCESS_TOKEN_QUERY_KEYS, ...MOBILE_REFRESH_TOKEN_QUERY_KEYS]) {
+      if (sanitizedQuery[key] !== undefined) {
+        delete sanitizedQuery[key]
+        changed = true
+      }
+    }
+
+    if (changed) {
+      void router.replace(
+        {
+          pathname: router.pathname,
+          query: sanitizedQuery,
+        },
+        undefined,
+        { shallow: true, scroll: false }
+      )
+    }
+  }
+
   async function bootstrap() {
+    syncMobileCheckoutContext()
     setPageError('')
     setAuthError('')
     setCourseError('')
@@ -481,6 +606,7 @@ export default function PaymentPage() {
         fetchCheckoutCourseOptions(),
       ])
       applyCheckoutCourseOptions(checkoutCourses)
+      setTrialOffer(data.trialOffer || null)
       const availablePlans = [...(data.plans || [])].sort((left, right) => {
         if ((left.course.displayOrder || 0) !== (right.course.displayOrder || 0)) {
           return (left.course.displayOrder || 0) - (right.course.displayOrder || 0)
@@ -494,6 +620,19 @@ export default function PaymentPage() {
       })
 
       if (!availablePlans.length) {
+        if (data.trialOffer && isMobileCheckoutRequest(router.query)) {
+          const nextCourse = data.trialOffer.course || data.course || null
+
+          setPlans([])
+          setSelectedPlanId('')
+          setSelectedCourse(nextCourse)
+          setSelectedCourseChoice(nextCourse?.courseId || '')
+          setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
+          setScreen('planSelect')
+          setStatusNote('Choose the 24-hour trial to continue.')
+          return
+        }
+
         setPlans([])
         setSelectedPlanId('')
         setSelectedCourse(data.course || null)
@@ -533,6 +672,7 @@ export default function PaymentPage() {
         fetchCheckoutCourseOptions(),
       ])
       applyCheckoutCourseOptions(checkoutCourses)
+      setTrialOffer(data.trialOffer || null)
       const availablePlans = [...(data.plans || [])].sort((left, right) => {
         if (left.durationMonths !== right.durationMonths) {
           return left.durationMonths - right.durationMonths
@@ -878,6 +1018,267 @@ export default function PaymentPage() {
     setCouponQuote(null)
     setCouponMessage('')
     setCouponError('')
+  }
+
+  function handleSelectTrialOffer() {
+    if (!shouldShowTrialOffer || !trialOffer) {
+      return
+    }
+
+    if (trialOffer.course?.courseId) {
+      setSelectedCourse(trialOffer.course)
+      setSelectedCourseChoice(trialOffer.course.courseId)
+    }
+
+    if (sessionUser?.name) {
+      setTrialName((current) => current || sessionUser.name || '')
+    }
+
+    setScreen('trial')
+    setTrialOtp('')
+    setTrialOtpStarted(false)
+    setTrialError('')
+    setTrialMessage('No payment will be collected. Your trial starts only after OTP verification.')
+    setPageError('')
+    setBillingError('')
+    postMobileEvent('TRIAL_SELECTED', {
+      code: trialOffer.code,
+      durationHours: trialOffer.durationHours,
+      courseId: trialOffer.course?.courseId,
+    })
+  }
+
+  function returnToPaidCheckout() {
+    setTrialOtp('')
+    setTrialOtpStarted(false)
+    setTrialError('')
+    setTrialMessage('')
+
+    if (selectedPlan) {
+      setScreen('ready')
+      return
+    }
+
+    setScreen('planSelect')
+  }
+
+  function handleTrialFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (trialOtpStarted) {
+      void handleVerifyTrialOtp()
+      return
+    }
+
+    void handleStartTrialOtp()
+  }
+
+  async function handleStartTrialOtp() {
+    const contactPayload = getTrialContactPayload()
+
+    if (!contactPayload) {
+      return
+    }
+
+    setTrialLoading(true)
+    setTrialAction('quote')
+    setTrialError('')
+    setTrialMessage('')
+
+    try {
+      const quote = await apiFetch<TrialQuoteResponse>('/billing/guest/trial/quote', {
+        method: 'POST',
+        body: JSON.stringify(contactPayload),
+      })
+
+      if (quote.eligibility?.eligible === false || isTrialFallbackCode(quote.eligibility?.code || quote.code)) {
+        setTrialError(getTrialEligibilityMessage(quote))
+        setTrialMessage('Paid checkout remains available.')
+        setTrialOtpStarted(false)
+        return
+      }
+
+      setTrialAction('send')
+
+      await apiFetch('/billing/guest/trial/otp/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...contactPayload,
+          channel: trialOtpChannel,
+        }),
+      })
+
+      setTrialOtpStarted(true)
+      setTrialMessage(`OTP sent by ${trialOtpChannel === 'whatsapp' ? 'WhatsApp' : 'SMS'}. Enter it to activate the 24-hour trial.`)
+      postMobileEvent('TRIAL_OTP_SENT', {
+        code: trialOffer?.code,
+        channel: trialOtpChannel,
+      })
+    } catch (error) {
+      if (isTrialPaidFallbackError(error)) {
+        setTrialError(getTrialPaidFallbackMessage(error))
+        setTrialMessage('Paid checkout remains available.')
+        setTrialOtpStarted(false)
+        return
+      }
+
+      setTrialError(getErrorMessage(error, 'Could not start the trial OTP. Please try again.'))
+    } finally {
+      setTrialLoading(false)
+      setTrialAction(null)
+    }
+  }
+
+  async function handleVerifyTrialOtp() {
+    const contactPayload = getTrialContactPayload()
+    const code = trialOtp.trim()
+
+    if (!contactPayload) {
+      return
+    }
+
+    if (code.length < 4) {
+      setTrialError('Enter the OTP sent to your mobile number.')
+      return
+    }
+
+    setTrialLoading(true)
+    setTrialAction('verify')
+    setTrialError('')
+    setTrialMessage('')
+
+    try {
+      const completed = await apiFetch<TrialVerifyResponse>('/billing/guest/trial/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...contactPayload,
+          gender: trialGender,
+          code,
+          privacyPolicyVersion,
+        }),
+      })
+      const accessToken = extractAccessToken(completed)
+      const refreshToken = extractRefreshToken(completed)
+
+      if (!accessToken) {
+        throw new Error('Trial activated, but the backend did not return an access token.')
+      }
+
+      tokenStore.setAccessToken(accessToken)
+
+      if (refreshToken) {
+        tokenStore.setRefreshToken(refreshToken)
+      }
+
+      const me = await apiFetch<any>('/me')
+      await apiFetch('/me/courses')
+
+      const nextSessionUser = extractSessionUser(me)
+      setSessionUser(nextSessionUser)
+      setAuthMode('bearer')
+
+      const returnUrl = completed.returnUrl || getQueryParam(router.query.returnUrl)
+
+      setTrialOtp('')
+      setTrialOtpStarted(false)
+      setTrialMessage('')
+      setCheckoutLoading(false)
+      setScreen('success')
+      setShowSuccessModal(Boolean(returnUrl))
+      setResult({
+        title: '24-hour trial active',
+        message: `Your ${trialCourseTitle} trial is active for ${trialOffer?.durationHours || 24} hours.`,
+        tone: 'success',
+        returnUrl,
+      })
+      setStatusNote('Trial activated successfully.')
+      postMobileEvent('AUTH_SUCCESS', {
+        accessToken,
+        refreshToken,
+      })
+      postMobileEvent('TRIAL_SUCCESS', {
+        status: 'success',
+        accessToken,
+        refreshToken,
+        trialCode: trialOffer?.code,
+        durationHours: trialOffer?.durationHours,
+        courseId: trialOffer?.course?.courseId,
+        returnUrl,
+      })
+      postMobileEvent('PAYMENT_SUCCESS', {
+        status: 'success',
+        accessType: 'trial',
+        trialCode: trialOffer?.code,
+        durationHours: trialOffer?.durationHours,
+        courseId: trialOffer?.course?.courseId,
+        returnUrl,
+      })
+    } catch (error) {
+      if (isTrialPaidFallbackError(error)) {
+        setTrialError(getTrialPaidFallbackMessage(error))
+        setTrialMessage('Paid checkout remains available.')
+        return
+      }
+
+      setTrialError(getErrorMessage(error, 'Could not verify the trial OTP. Please try again.'))
+    } finally {
+      setTrialLoading(false)
+      setTrialAction(null)
+    }
+  }
+
+  function getTrialContactPayload() {
+    const name = trialName.trim() || sessionUser?.name?.trim() || ''
+
+    if (!name) {
+      setTrialError('Enter your name to continue.')
+      return null
+    }
+
+    if (!trialGender) {
+      setTrialError('Choose your gender.')
+      return null
+    }
+
+    if (!trialTermsAccepted) {
+      setTrialError('Accept the terms and privacy policy to continue.')
+      return null
+    }
+
+    const payload: {
+      planId?: string
+      phoneE164?: string
+      email?: string
+      name: string
+    } = {
+      name,
+    }
+    const trialPlanId = selectedPlan?.planId
+
+    if (trialPlanId) {
+      payload.planId = trialPlanId
+    }
+
+    if (!sessionUser) {
+      const validationError = validateBillingDetails(billingDetails, phone)
+
+      if (validationError) {
+        setTrialError(validationError)
+        return null
+      }
+
+      try {
+        const normalizedPhone = normalizeIndianPhone(phone)
+
+        payload.phoneE164 = normalizedPhone.e164
+        payload.email = billingDetails.email.trim().toLowerCase()
+      } catch (error) {
+        setTrialError(getErrorMessage(error, 'Enter a valid mobile number.'))
+        return null
+      }
+    }
+
+    return payload
   }
 
   function getCouponPreviewEndpoint() {
@@ -1923,6 +2324,7 @@ export default function PaymentPage() {
       screen === 'planSelect' ||
       screen === 'otp' ||
       screen === 'course' ||
+      screen === 'trial' ||
       screen === 'accountSetup' ||
       screen === 'error' ||
       screen === 'success'
@@ -2168,6 +2570,218 @@ export default function PaymentPage() {
     )
   }
 
+  function renderTrialForm() {
+    const disabled = trialLoading
+    const showContactFields = !sessionUser
+    const primaryDisabled =
+      disabled ||
+      !trialOffer ||
+      (!showContactFields ? false : phone.trim().length < 10 || !billingDetails.email.trim()) ||
+      !(trialName.trim() || sessionUser?.name?.trim()) ||
+      !trialGender ||
+      !trialTermsAccepted ||
+      (trialOtpStarted && trialOtp.trim().length < 4)
+    const primaryLabel = trialOtpStarted
+      ? trialLoading && trialAction === 'verify'
+        ? 'Verifying OTP...'
+        : 'Verify OTP and activate trial'
+      : trialLoading && trialAction === 'quote'
+        ? 'Checking eligibility...'
+        : trialLoading && trialAction === 'send'
+          ? 'Sending OTP...'
+          : 'Send OTP for trial'
+
+    return (
+      <div className="space-y-3">
+        <TrialOfferCard
+          compact
+          courseTitle={trialCourseTitle}
+          offer={trialOffer}
+        />
+
+        <form onSubmit={handleTrialFormSubmit} className="space-y-2.5 text-[#211536]">
+          <section className="rounded-[22px] border border-[#c8f4df] bg-white p-3.5 shadow-[0_18px_42px_rgba(12,121,85,0.10)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#0f8f64]">
+                Trial activation
+              </p>
+              <p className="rounded-full bg-[#ecfdf5] px-2.5 py-1 text-[11px] font-black text-[#047857]">
+                No Razorpay
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              {showContactFields ? (
+                <>
+                  <InputField
+                    label="Mobile number"
+                    hint="+91"
+                    placeholder="10-digit number"
+                    value={phone}
+                    onChange={(value) => {
+                      setPhone(value.replace(/\D/g, '').slice(0, 10))
+                      setTrialError('')
+                      setBillingError('')
+                    }}
+                    inputMode="numeric"
+                    disabled={disabled || trialOtpStarted}
+                  />
+                  <InputField
+                    label="Email address"
+                    placeholder="you@email.com"
+                    value={billingDetails.email}
+                    onChange={(value) => {
+                      updateBillingField('email', value)
+                      setTrialError('')
+                    }}
+                    inputMode="email"
+                    disabled={disabled || trialOtpStarted}
+                  />
+                </>
+              ) : (
+                <SessionCustomerCard user={sessionUser} />
+              )}
+
+              <InputField
+                label="Full name"
+                value={trialName}
+                onChange={(value) => {
+                  setTrialName(value)
+                  setTrialError('')
+                }}
+                disabled={disabled}
+              />
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">Gender</span>
+                <div className="relative">
+                  <select
+                    value={trialGender}
+                    onChange={(event) => {
+                      setTrialGender(event.target.value as AccountGender)
+                      setTrialError('')
+                    }}
+                    disabled={disabled}
+                    className="h-10 w-full appearance-none rounded-[14px] border border-[#e8e2ee] bg-white px-3 pr-9 text-sm font-semibold text-[#211536] outline-none transition focus:border-[#0f8f64] disabled:cursor-not-allowed disabled:bg-[#fbf9fd] disabled:text-[#9a90ae]"
+                  >
+                    <option value="">Select</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="MALE">Male</option>
+                    <option value="NON_BINARY">Non-binary</option>
+                    <option value="OTHER">Other</option>
+                    <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                  </select>
+                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a90ae]" />
+                </div>
+              </label>
+
+              {!trialOtpStarted && (
+                <div>
+                  <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">OTP channel</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['sms', 'whatsapp'] as TrialOtpChannel[]).map((channel) => {
+                      const active = trialOtpChannel === channel
+
+                      return (
+                        <button
+                          key={channel}
+                          type="button"
+                          onClick={() => setTrialOtpChannel(channel)}
+                          disabled={disabled}
+                          className={cn(
+                            'h-10 rounded-[14px] border px-3 text-sm font-black capitalize transition disabled:cursor-not-allowed disabled:opacity-60',
+                            active
+                              ? 'border-[#0f8f64] bg-[#ecfdf5] text-[#047857]'
+                              : 'border-[#e8e2ee] bg-white text-[#675f73] hover:border-[#91dfbd]'
+                          )}
+                        >
+                          {channel}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {trialOtpStarted && (
+                <InputField
+                  label="OTP"
+                  placeholder="Enter OTP"
+                  value={trialOtp}
+                  onChange={(value) => {
+                    setTrialOtp(value.replace(/\D/g, '').slice(0, 6))
+                    setTrialError('')
+                  }}
+                  inputMode="numeric"
+                  disabled={disabled}
+                />
+              )}
+            </div>
+
+            <label className="mt-3 flex items-start gap-3 rounded-[14px] border border-[#e8f7ef] bg-[#f8fffb] px-3 py-2.5 text-xs leading-5 text-[#486155]">
+              <input
+                type="checkbox"
+                checked={trialTermsAccepted}
+                onChange={(event) => {
+                  setTrialTermsAccepted(event.target.checked)
+                  setTrialError('')
+                }}
+                disabled={disabled}
+                className="mt-0.5 h-4 w-4 rounded border-[#a7e7c8] text-[#0f8f64] focus:ring-[#0f8f64]"
+              />
+              <span>
+                I accept the{' '}
+                <a href="/terms-and-conditions" className="font-bold text-[#047857] hover:underline">
+                  Terms
+                </a>{' '}
+                and{' '}
+                <a href="/privacy-policy" className="font-bold text-[#047857] hover:underline">
+                  Privacy Policy
+                </a>
+                .
+              </span>
+            </label>
+          </section>
+
+          <div className="space-y-2.5">
+            {trialError && <MessageBanner tone="danger">{trialError}</MessageBanner>}
+            {trialMessage && <MessageBanner tone={trialOtpStarted ? 'success' : 'warning'}>{trialMessage}</MessageBanner>}
+          </div>
+
+          <div className="space-y-2.5">
+            <button
+              type="submit"
+              disabled={primaryDisabled}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[#0f8f64] px-5 py-3 text-sm font-black text-white shadow-[0_18px_34px_rgba(15,143,100,0.24)] transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {primaryLabel}
+            </button>
+
+            {trialOtpStarted && (
+              <button
+                type="button"
+                onClick={() => void handleStartTrialOtp()}
+                disabled={disabled}
+                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] border border-[#a7e7c8] bg-white px-5 py-3 text-sm font-black text-[#047857] transition hover:border-[#0f8f64] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {trialLoading && trialAction === 'send' ? 'Resending...' : 'Resend OTP'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={returnToPaidCheckout}
+              disabled={disabled && trialAction === 'verify'}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] border border-[#eadff8] bg-white px-5 py-3 text-sm font-black text-[#6b21a8] transition hover:border-[#9b63ef] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              View paid plans instead
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
   function renderPlanSelection() {
     const displayPlans = activePlans.length ? activePlans : plans
 
@@ -2187,17 +2801,29 @@ export default function PaymentPage() {
 
         {pageError && <MessageBanner tone="danger">{pageError}</MessageBanner>}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {displayPlans.map((plan, index) => (
-            <PricingPlanCard
-              key={plan.planId}
-              meta={getPricingPlanMeta(plan, displayPlans)}
-              onSelect={handleSelectPublicPlan}
-              plan={plan}
-              tilt={index % 2 === 0 ? 'left' : 'right'}
-            />
-          ))}
-        </div>
+        {shouldShowTrialOffer && (
+          <TrialOfferCard
+            courseTitle={trialCourseTitle}
+            offer={trialOffer}
+            onSelect={handleSelectTrialOffer}
+          />
+        )}
+
+        {displayPlans.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {displayPlans.map((plan, index) => (
+              <PricingPlanCard
+                key={plan.planId}
+                meta={getPricingPlanMeta(plan, displayPlans)}
+                onSelect={handleSelectPublicPlan}
+                plan={plan}
+                tilt={index % 2 === 0 ? 'left' : 'right'}
+              />
+            ))}
+          </div>
+        ) : (
+          <MessageBanner tone="warning">Paid plans are not available right now.</MessageBanner>
+        )}
       </section>
     )
   }
@@ -2209,6 +2835,15 @@ export default function PaymentPage() {
 
     return (
       <div className="space-y-3">
+        {shouldShowTrialOffer && (screen === 'ready' || screen === 'failed') && (
+          <TrialOfferCard
+            compact
+            courseTitle={trialCourseTitle}
+            offer={trialOffer}
+            onSelect={handleSelectTrialOffer}
+          />
+        )}
+
         <form
           onSubmit={handleCheckoutFormSubmit}
           className="space-y-2.5 text-[#211536]"
@@ -2417,13 +3052,15 @@ export default function PaymentPage() {
             <CheckIcon className="h-8 w-8" />
           </div>
           <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b21a8]">
-            Access ready
+            {isTrialSuccess ? 'Trial active' : 'Access ready'}
           </p>
           <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] text-slate-950 sm:text-5xl">
-            Your access is ready.
+            {isTrialSuccess ? 'Your 24-hour trial is active.' : 'Your access is ready.'}
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-500">
-            Download the Virtual Library mobile app and sign in with the phone number used for checkout to start learning.
+            {isTrialSuccess
+              ? 'Continue in the Virtual Library mobile app. Your trial access is active now and no payment was collected.'
+              : 'Download the Virtual Library mobile app and sign in with the phone number used for checkout to start learning.'}
           </p>
 
           <div className="mt-7">
@@ -2433,11 +3070,11 @@ export default function PaymentPage() {
 
         <aside className="rounded-3xl bg-[#6b21a8] p-6 text-white shadow-[0_24px_56px_rgba(107,33,168,0.22)]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#d3b8ff]">
-            Subscription
+            {isTrialSuccess ? 'Trial access' : 'Subscription'}
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-[-0.04em]">{courseTitle}</h2>
           <div className="mt-6 space-y-3 border-y border-white/14 py-5">
-            <PlanFeature>Course access is active</PlanFeature>
+            <PlanFeature>{isTrialSuccess ? '24-hour trial access is active' : 'Course access is active'}</PlanFeature>
             <PlanFeature>Mobile app access is enabled</PlanFeature>
             <PlanFeature>Study rooms, focus tools, notes, and progress insights are ready</PlanFeature>
           </div>
@@ -2471,6 +3108,10 @@ export default function PaymentPage() {
 
     if (screen === 'accountSetup') {
       return renderAccountSetup()
+    }
+
+    if (screen === 'trial') {
+      return renderTrialForm()
     }
 
     if (screen === 'course') {
@@ -2655,7 +3296,9 @@ export default function PaymentPage() {
 
               <div className="min-w-0 rounded-full bg-[#f0e3ff] px-3 py-1 text-[11px] font-black text-[#8441ee]">
                 <span className="block truncate">
-                  {selectedPlan ? `${formatPlanDuration(selectedPlan.durationMonths)} Plan` : 'Selected Plan'}
+                  {screen === 'trial'
+                    ? '24h Trial'
+                    : selectedPlan ? `${formatPlanDuration(selectedPlan.durationMonths)} Plan` : 'Selected Plan'}
                 </span>
               </div>
             </div>
@@ -2665,7 +3308,7 @@ export default function PaymentPage() {
                 Secure checkout
               </p>
               <h1 className="mt-1 text-[28px] font-black leading-none tracking-[-0.04em] text-[#171021]">
-                Payment
+                {screen === 'trial' ? 'Trial' : 'Payment'}
               </h1>
             </div>
 
@@ -2692,6 +3335,8 @@ export default function PaymentPage() {
       <SuccessCompletionModal
         isOpen={showSuccessModal && screen === 'success' && Boolean(result?.returnUrl)}
         message={result?.message}
+        eyebrowText={isTrialSuccess ? 'Trial Activated' : 'Payment Completed'}
+        titleText={isTrialSuccess ? 'Your trial is active' : 'Your access is ready'}
         helperText={
           result?.returnUrl
             ? 'Close this modal to continue back into the app.'
@@ -2992,6 +3637,80 @@ function SessionCustomerCard({ user }: { user: PaymentSessionUser | null }) {
   )
 }
 
+function TrialOfferCard({
+  compact = false,
+  courseTitle,
+  offer,
+  onSelect,
+}: {
+  compact?: boolean
+  courseTitle: string
+  offer: TrialOffer | null
+  onSelect?: () => void
+}) {
+  if (!offer) {
+    return null
+  }
+
+  const durationLabel = formatTrialDuration(offer.durationHours)
+
+  return (
+    <section
+      className={cn(
+        'relative overflow-hidden rounded-[22px] border border-[#a7e7c8] bg-[linear-gradient(135deg,#f7fffb_0%,#ecfdf5_54%,#fffaf0_100%)] shadow-[0_18px_42px_rgba(12,121,85,0.12)]',
+        compact ? 'p-3.5' : 'p-5'
+      )}
+    >
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#0f8f64]">
+              Mobile trial
+            </p>
+            <h2 className={cn(
+              'mt-1 font-black leading-tight tracking-[-0.04em] text-[#10261d]',
+              compact ? 'text-xl' : 'text-3xl'
+            )}>
+              {durationLabel} free trial
+            </h2>
+            <p className={cn('mt-2 font-medium leading-5 text-[#476457]', compact ? 'text-xs' : 'text-sm')}>
+              {courseTitle} access after OTP verification.
+            </p>
+          </div>
+
+          <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-black text-[#047857] shadow-[0_8px_18px_rgba(12,121,85,0.10)]">
+            {formatCurrency(offer.amountPaise, offer.currency)}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TrialBadge>No Razorpay</TrialBadge>
+          <TrialBadge>OTP required</TrialBadge>
+          <TrialBadge>First time only</TrialBadge>
+        </div>
+
+        {onSelect && (
+          <button
+            type="button"
+            onClick={onSelect}
+            className="mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[14px] bg-[#0f8f64] px-5 py-3 text-sm font-black text-white shadow-[0_16px_30px_rgba(15,143,100,0.22)] transition hover:bg-[#047857]"
+          >
+            Start {durationLabel} trial
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TrialBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-[#c8f4df] bg-white/78 px-2.5 py-1 text-[11px] font-black text-[#047857]">
+      {children}
+    </span>
+  )
+}
+
 function PlanOptionCard({
   active,
   disabled,
@@ -3284,16 +4003,20 @@ function AppleIcon({ className }: { className?: string }) {
 }
 
 function SuccessCompletionModal({
+  eyebrowText,
   isOpen,
   message,
   helperText,
   buttonLabel,
+  titleText,
   onClose,
 }: {
+  eyebrowText?: string
   isOpen: boolean
   message?: string
   helperText: string
   buttonLabel: string
+  titleText?: string
   onClose: () => void
 }) {
   useEffect(() => {
@@ -3321,10 +4044,10 @@ function SuccessCompletionModal({
         </div>
 
         <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#6b21a8]">
-          Payment Completed
+          {eyebrowText || 'Payment Completed'}
         </p>
         <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">
-          Your access is ready
+          {titleText || 'Your access is ready'}
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-500">
           {message || 'Payment confirmed successfully.'}
@@ -3465,6 +4188,14 @@ function formatPlanDuration(durationMonths: number) {
   return `${durationMonths} ${durationMonths === 1 ? 'Month' : 'Months'}`
 }
 
+function formatTrialDuration(durationHours: number) {
+  if (durationHours === 24) {
+    return '24-hour'
+  }
+
+  return `${durationHours}-hour`
+}
+
 function formatPlanTitle(plan: BillingPlan) {
   if (plan.name?.trim()) {
     return plan.name.trim()
@@ -3493,6 +4224,69 @@ function getQueryParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
 }
 
+function getFirstQueryValue(query: Record<string, string | string[] | undefined>, keys: string[]) {
+  for (const key of keys) {
+    const value = getQueryParam(query[key])
+
+    if (value) {
+      return value
+    }
+  }
+
+  return ''
+}
+
+function isMobileCheckoutRequest(query: Record<string, string | string[] | undefined>) {
+  if (typeof window !== 'undefined' && Boolean(window.ReactNativeWebView)) {
+    return true
+  }
+
+  if (hasRememberedMobileCheckoutContext()) {
+    return true
+  }
+
+  if (getFirstQueryValue(query, [...MOBILE_ACCESS_TOKEN_QUERY_KEYS, ...MOBILE_REFRESH_TOKEN_QUERY_KEYS])) {
+    return true
+  }
+
+  if (isTruthyQueryFlag(getQueryParam(query.mobile)) || isTruthyQueryFlag(getQueryParam(query.fromMobile))) {
+    return true
+  }
+
+  return MOBILE_CONTEXT_QUERY_KEYS.some((key) => {
+    const value = getQueryParam(query[key])
+
+    return value ? MOBILE_SOURCE_VALUES.has(value.trim().toLowerCase()) : false
+  })
+}
+
+function rememberMobileCheckoutContext() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.sessionStorage.setItem(MOBILE_CHECKOUT_CONTEXT_KEY, String(Date.now()))
+}
+
+function hasRememberedMobileCheckoutContext() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const rawTimestamp = window.sessionStorage.getItem(MOBILE_CHECKOUT_CONTEXT_KEY)
+  const timestamp = Number(rawTimestamp)
+
+  if (!Number.isFinite(timestamp)) {
+    return false
+  }
+
+  return Date.now() - timestamp <= MOBILE_CHECKOUT_CONTEXT_TTL_MS
+}
+
+function isTruthyQueryFlag(value: string | undefined) {
+  return value === '1' || value?.toLowerCase() === 'true'
+}
+
 function getQueryNumber(value: string | string[] | undefined) {
   const parsed = Number(getQueryParam(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
@@ -3516,7 +4310,49 @@ function getPaymentLinkUrl(created: PaymentLinkCreateResponse) {
 
 function getPaymentErrorCode(error: unknown) {
   if (error instanceof PaymentApiError) {
-    return typeof error.body?.code === 'string' ? error.body.code : ''
+    const code =
+      error.body?.code ||
+      error.body?.data?.code ||
+      error.body?.errorCode ||
+      error.body?.data?.errorCode
+
+    return typeof code === 'string' ? code : ''
+  }
+
+  return ''
+}
+
+function getTrialEligibilityMessage(quote: TrialQuoteResponse) {
+  return (
+    quote.eligibility?.message ||
+    quote.message ||
+    getTrialFallbackMessageFromCode(quote.eligibility?.code || quote.code) ||
+    'This trial is not available for this account. You can still choose a paid plan.'
+  )
+}
+
+function isTrialPaidFallbackError(error: unknown) {
+  return isTrialFallbackCode(getPaymentErrorCode(error))
+}
+
+function getTrialPaidFallbackMessage(error: unknown) {
+  return getTrialFallbackMessageFromCode(getPaymentErrorCode(error)) || getErrorMessage(
+    error,
+    'This trial is not available for this account. You can still choose a paid plan.'
+  )
+}
+
+function isTrialFallbackCode(code?: string) {
+  return code === 'TRIAL_NOT_AVAILABLE' || code === 'ACTIVE_ACCESS_EXISTS'
+}
+
+function getTrialFallbackMessageFromCode(code?: string) {
+  if (code === 'TRIAL_NOT_AVAILABLE') {
+    return 'This trial is not available right now. You can still choose a paid plan.'
+  }
+
+  if (code === 'ACTIVE_ACCESS_EXISTS') {
+    return 'You already have active access. Paid plans remain available if you want to extend it.'
   }
 
   return ''

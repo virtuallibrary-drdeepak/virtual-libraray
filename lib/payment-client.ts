@@ -18,6 +18,15 @@ export type BillingPlan = {
   course: CourseSummary
 }
 
+export type TrialOffer = {
+  code: string
+  durationHours: number
+  amountPaise: number
+  currency: string
+  requiresOtp: boolean
+  course: CourseSummary
+}
+
 export type BillingPlansResponse = {
   plans: BillingPlan[]
   selectedCourse: CourseSummary | null
@@ -29,6 +38,7 @@ export type BillingPlansResponse = {
 export type PublicBillingPlansResponse = {
   plans: BillingPlan[]
   course: CourseSummary | null
+  trialOffer?: TrialOffer | null
   code?: string
   message?: string
 }
@@ -195,6 +205,29 @@ export type CheckoutOtpVerifyResponse = {
   }
   order?: PaymentLinkStatusResponse['order']
   courseAccess?: any
+}
+
+export type TrialQuoteResponse = {
+  eligibility?: {
+    eligible?: boolean
+    message?: string
+    code?: string
+    reason?: string
+  }
+  code?: string
+  message?: string
+  trialOffer?: TrialOffer
+  plan?: BillingPlan
+  course?: CourseSummary
+}
+
+export type TrialVerifyResponse = CheckoutOtpVerifyResponse & {
+  returnUrl?: string
+  trial?: {
+    code?: string
+    durationHours?: number
+    expiresAt?: string
+  }
 }
 
 export type PasswordResetResponse = {
