@@ -102,8 +102,8 @@ const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
 const MOBILE_CHECKOUT_CONTEXT_KEY = 'vl_mobile_checkout_context'
 const MOBILE_CHECKOUT_CONTEXT_TTL_MS = 30 * 60 * 1000
-const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
-const APP_STORE_HREF = 'https://apps.apple.com/'
+const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
+const APP_STORE_HREF = 'https://apps.apple.com/in/app/virtual-library/id6761748966'
 const PAYMENT_PLAN_FEATURES = [
   '24/7 Live Study Rooms',
   'Focus Mode - Block distracting apps',

@@ -10,8 +10,8 @@ import {
 } from '@/lib/payment-client'
 import { sortPricingPlans } from '@/components/v2/PricingPlanCard'
 
-const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
-const APP_STORE_HREF = 'https://apps.apple.com/'
+const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
+const APP_STORE_HREF = 'https://apps.apple.com/in/app/virtual-library/id6761748966'
 const HERO_IMAGE = '/img/v2/hero-section-illustration.png'
 const STUDY_ROOM_IMAGE = '/img/banner-right.png'
 const COMMUNITY_IMAGE = '/img/Explore-Communities.jpg'

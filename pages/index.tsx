@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import type { MouseEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import SiteNavbar from '@/components/SiteNavbar'
+import VirtualStudyHero from '@/components/v2/VirtualStudyHero'
 import {
   apiFetch,
   BillingPlan,
@@ -13,12 +14,9 @@ import {
   PublicBillingPlansResponse,
 } from '@/lib/payment-client'
 
-const HERO_BACKGROUND_IMAGE = '/img/v2/hero_asset/background.png'
-const HERO_PHONE_IMAGE = '/img/v2/hero_asset/phone.png'
-const HERO_ICONS_IMAGE = '/img/v2/hero_asset/icons.png'
 const ECOSYSTEM_IMAGE = '/img/v2/ecosystem.png'
-const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
-const APP_STORE_HREF = 'https://apps.apple.com/'
+const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
+const APP_STORE_HREF = 'https://apps.apple.com/in/app/virtual-library/id6761748966'
 const DEFAULT_COURSE_SLUG = 'neet-pg'
 
 type IconName =
@@ -75,13 +73,6 @@ type DisplayPlan = {
   badge?: string
   featured?: boolean
 }
-
-const HERO_STATS = [
-  { value: '24/7', label: 'Active Study Rooms' },
-  { value: '3,000+', label: 'Active Members' },
-  { value: '60% +', label: 'Female Members' },
-  { value: '8 Hrs +', label: 'Study Time' },
-]
 
 const FEATURES: Feature[] = [
   {
@@ -463,7 +454,7 @@ export default function Home() {
       <div className="min-h-screen overflow-x-hidden bg-[#f7f6fb] text-[#171322]">
         <SiteNavbar />
         <main>
-          <HeroSection />
+          <VirtualStudyHero googlePlayHref={GOOGLE_PLAY_HREF} appStoreHref={APP_STORE_HREF} />
           <FeatureSection />
           <TogetherSection />
           <AudienceSection />
@@ -484,103 +475,6 @@ export default function Home() {
         <SiteFooter />
       </div>
     </>
-  )
-}
-
-function HeroSection() {
-  return (
-    <section className="relative overflow-hidden bg-[linear-gradient(145deg,#f2f8ff_0%,#fff6fb_100%)]">
-      <div className="relative flex h-[calc(100lvh-4rem)] flex-col overflow-hidden lg:h-[calc(100vh-4rem)]">
-        <NoiseGlow className="-left-32 top-[18%] hidden h-[28rem] w-[28rem] opacity-55 sm:block" />
-        <NoiseGlow className="-right-28 bottom-[12%] hidden h-80 w-80 opacity-35 lg:block" />
-        <div className="relative z-20 mx-auto grid min-h-0 w-full max-w-7xl flex-1 grid-rows-[auto_auto_auto_minmax(0,1fr)_auto] items-center justify-items-center gap-y-3 px-0 pb-5 pt-[5lvh] text-center sm:gap-y-4 sm:px-6 sm:pb-7 sm:pt-8 lg:gap-y-2 lg:pb-4 lg:pt-5">
-          <p className="inline-flex items-center gap-2 rounded-full bg-[#ddecff] px-4 py-2 text-[0.78rem] font-bold text-[#185cff] shadow-[0_12px_28px_rgba(37,92,255,0.08)] sm:px-5 sm:text-sm">
-            <Icon name="rank" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            India's first Virtual Library Space
-          </p>
-
-          <h1 className="max-w-[23rem] px-1 text-[2.08rem] font-extrabold leading-[1.12] tracking-normal text-[#070711] sm:max-w-5xl sm:px-0 sm:text-[3.15rem] lg:max-w-[56rem] lg:text-[3rem] lg:leading-[1.04] xl:text-[3.45rem]">
-            Struggling to stay
-            <br />
-            <span className="bg-[linear-gradient(90deg,#265cff_0%,#8b22ff_100%)] bg-clip-text text-transparent">
-              consistent
-            </span>{' '}
-            with studies
-            <br />
-            at home?
-          </h1>
-
-          <p className="max-w-[40rem] px-4 text-[0.9rem] font-medium leading-7 text-[#747083] sm:px-0 sm:text-sm sm:leading-8 lg:max-w-4xl lg:text-lg lg:leading-7 xl:text-xl xl:leading-8">
-            Join 3000+ aspirants studying daily in a 24x7 Virtual Library built for focus, discipline, and accountability.
-          </p>
-
-          <div className="relative flex min-h-0 w-full items-center justify-center self-stretch overflow-hidden">
-            <div className="relative isolate h-[34lvh] min-h-[14.5rem] w-full max-w-none overflow-hidden sm:h-[34vh] sm:min-h-[17.5rem] sm:w-[76vw] sm:max-w-[700px] lg:h-[13rem] lg:min-h-0 lg:w-[520px] lg:max-w-none xl:h-[14.25rem] xl:w-[590px]">
-              <div className="pointer-events-none absolute left-1/2 top-[52%] h-[72%] w-[78%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#7c3aed]/12 blur-3xl" />
-              <div className="pointer-events-none absolute inset-x-0 bottom-[1%] top-[8%] z-0 overflow-hidden">
-                <img
-                  src={HERO_BACKGROUND_IMAGE}
-                  alt=""
-                  aria-hidden="true"
-                  className="h-full w-full object-cover opacity-72 saturate-[0.95] blur-[0.25px] lg:opacity-60"
-                />
-                <div className="absolute inset-x-0 top-0 h-[28%] bg-[linear-gradient(180deg,#fbf8ff_0%,rgba(251,248,255,0.82)_36%,rgba(251,248,255,0)_100%)] backdrop-blur-[2px]" />
-                <div className="absolute inset-x-0 bottom-0 h-[36%] bg-[linear-gradient(180deg,rgba(251,248,255,0)_0%,rgba(251,248,255,0.9)_58%,#fbf8ff_100%)] backdrop-blur-[2px]" />
-              </div>
-              <img
-                src={HERO_PHONE_IMAGE}
-                alt="Virtual Library app dashboard on a phone"
-                className="pointer-events-none absolute bottom-[-31%] left-1/2 z-20 h-[130%] -translate-x-1/2 object-contain drop-shadow-[0_30px_58px_rgba(38,24,76,0.22)] sm:h-[134%] lg:bottom-[-34%] lg:h-[128%]"
-              />
-              <img
-                src={HERO_ICONS_IMAGE}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute left-1/2 top-[50%] z-30 w-[96%] -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-[0_14px_28px_rgba(38,24,76,0.14)] sm:w-[92%] lg:w-[84%]"
-              />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 h-[30%] bg-[linear-gradient(180deg,rgba(251,248,255,0)_0%,rgba(251,248,255,0.88)_58%,#fbf8ff_100%)]" />
-            </div>
-          </div>
-
-          <div className="grid w-full max-w-3xl gap-2 px-4 sm:grid-cols-2 sm:gap-3 sm:px-0">
-            <a
-              href="#plans"
-              className="inline-flex h-14 items-center justify-center gap-2 rounded-[18px] bg-[#7435df] px-6 text-base font-bold text-white shadow-[0_18px_34px_rgba(109,53,223,0.24)] transition hover:bg-[#5b25c9] sm:rounded-[22px] sm:text-lg"
-            >
-              Join Virtual Library Now
-              <ArrowRightIcon className="h-5 w-5" />
-            </a>
-            <DownloadStoreButton />
-          </div>
-        </div>
-      </div>
-
-      <div className="relative z-10 bg-[#050505]">
-        <div className="mx-auto grid max-w-5xl grid-cols-2 text-center sm:grid-cols-4">
-          {HERO_STATS.map((stat) => (
-            <div key={stat.label} className="px-4 py-3 sm:px-5">
-              <p className="text-[1.8rem] font-extrabold leading-none text-white sm:text-3xl">{stat.value}</p>
-              <p className="mt-1.5 text-sm font-semibold leading-5 text-white sm:mt-2">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function DownloadStoreButton() {
-  return (
-    <div className="flex h-14 w-full items-center justify-center gap-4 rounded-[18px] border border-[#e2ddea] bg-white px-6 text-sm font-bold text-[#070711] shadow-[0_12px_26px_rgba(35,24,70,0.05)] sm:gap-5 sm:rounded-[22px] sm:text-lg">
-      <span>Download on</span>
-      <a href={GOOGLE_PLAY_HREF} target="_blank" rel="noreferrer" aria-label="Download on Google Play">
-        <PlayStoreIcon className="h-5 w-5 sm:h-7 sm:w-7" />
-      </a>
-      <span aria-hidden="true" className="h-6 w-px bg-[#d8d3df] sm:h-7" />
-      <a href={APP_STORE_HREF} target="_blank" rel="noreferrer" aria-label="Download on App Store">
-        <AppleIcon className="h-5 w-5 text-[#8b8b8b] sm:h-7 sm:w-7" />
-      </a>
-    </div>
   )
 }
 
@@ -1442,21 +1336,6 @@ function ComparisonCard({
         ))}
       </div>
     </article>
-  )
-}
-
-function NoiseGlow({ className }: { className: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={`pointer-events-none absolute rounded-full ${className}`}
-      style={{
-        background:
-          'radial-gradient(circle, rgba(109,53,223,0.48) 0 1px, transparent 1.5px)',
-        backgroundSize: '7px 7px',
-        filter: 'drop-shadow(0 0 36px rgba(109,53,223,0.44)) blur(0.1px)',
-      }}
-    />
   )
 }
 
