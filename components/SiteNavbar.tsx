@@ -29,10 +29,10 @@ export default function SiteNavbar({
   const closeMenu = () => setIsOpen(false)
 
   return (
-    <header className="sticky top-0 z-[9999] border-b border-[#ece7f4] bg-white shadow-[0_8px_24px_rgba(48,32,88,0.06)]">
-      <div className="relative z-[10000] mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 bg-white px-4 sm:px-6">
+    <header className="sticky top-0 z-[9999] border-b border-[#f0ebf7] bg-white/95 shadow-[0_8px_20px_rgba(48,32,88,0.04)] backdrop-blur">
+      <div className="relative z-[10000] mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:h-[4.5rem]">
         <Link href="/" className="flex shrink-0 items-center" aria-label="Virtual Library home" onClick={closeMenu}>
-          <img src="/img/logo.svg" alt="Virtual Library" className="h-8 w-auto" />
+          <img src="/img/logo.svg" alt="Virtual Library" className="h-9 w-auto sm:h-10" />
         </Link>
 
         <nav className="hidden items-center gap-7 text-sm font-bold text-[#575069] lg:flex">
@@ -46,19 +46,19 @@ export default function SiteNavbar({
         <div className="flex shrink-0 items-center gap-3">
           <a
             href={ctaHref}
-            className="hidden h-10 items-center justify-center rounded-lg bg-[#6d35df] px-4 text-sm font-bold text-white shadow-[0_14px_28px_rgba(109,53,223,0.18)] transition hover:bg-[#5b25c9] sm:inline-flex"
+            className="hidden h-10 items-center justify-center rounded-lg bg-[#6d35df] px-4 text-sm font-bold text-white shadow-[0_14px_28px_rgba(109,53,223,0.18)] transition hover:bg-[#5b25c9] lg:inline-flex"
           >
             {ctaLabel}
           </a>
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#e5deee] bg-white text-[#171322] shadow-[0_10px_22px_rgba(48,32,88,0.06)] transition hover:border-[#cbbcff] hover:text-[#6d35df] lg:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#f2eef8] bg-white text-[#202540] shadow-[0_10px_24px_rgba(48,32,88,0.08)] transition hover:border-[#d9ceff] hover:text-[#6d35df] lg:hidden"
             aria-controls="mobile-site-nav"
             aria-expanded={isOpen}
             aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
             onClick={() => setIsOpen((current) => !current)}
           >
-            {isOpen ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+            {isOpen ? <CloseIcon className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
           </button>
         </div>
       </div>
@@ -79,7 +79,7 @@ export default function SiteNavbar({
         />
 
         <div
-          className={`relative mx-3 mt-3 overflow-hidden rounded-[28px] border border-[#ece7f4] bg-white shadow-[0_24px_70px_rgba(48,32,88,0.18)] transition duration-300 ease-out sm:mx-6 ${
+          className={`relative mx-4 mt-3 overflow-hidden rounded-[24px] border border-[#ece7f4] bg-white shadow-[0_24px_70px_rgba(48,32,88,0.18)] transition duration-300 ease-out sm:mx-6 ${
             isOpen ? 'translate-y-0 opacity-100' : '-translate-y-3 opacity-0'
           }`}
         >

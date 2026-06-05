@@ -504,10 +504,10 @@ function FeatureSection() {
                 aria-expanded={isExpanded}
                 aria-controls={`feature-description-${index}`}
                 onClick={() => setExpandedFeature(isExpanded ? null : index)}
-                className="group w-full rounded-[22px] border border-[#e5deee] bg-white/95 p-5 text-left shadow-[0_18px_42px_rgba(48,31,90,0.08)] ring-1 ring-white/70 transition duration-300 hover:-translate-y-1 hover:border-[#c7b3ff] hover:shadow-[0_28px_70px_rgba(90,54,180,0.14)] sm:min-h-[252px] sm:cursor-default sm:rounded-[28px] sm:p-7"
+                className="group w-full rounded-[22px] border border-[#e5deee] bg-white/95 p-5 text-left ring-1 ring-white/70 transition duration-300 hover:-translate-y-1 hover:border-[#c7b3ff] sm:min-h-[252px] sm:cursor-default sm:rounded-[28px] sm:p-7"
               >
                 <div className="flex items-center gap-4 sm:block">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[17px] bg-[linear-gradient(145deg,#efe7ff,#ddcdff)] text-[#753ee6] shadow-[0_14px_30px_rgba(117,62,230,0.16)] ring-1 ring-[#d9caff] transition group-hover:scale-105 sm:h-14 sm:w-14 sm:rounded-[20px]">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[17px] bg-[#7c3aed] text-white ring-1 ring-[#7c3aed] transition group-hover:scale-105 sm:h-14 sm:w-14 sm:rounded-[20px]">
                     <Icon name={feature.icon} className="h-[21px] w-[21px] sm:h-6 sm:w-6" />
                   </span>
 
@@ -613,10 +613,10 @@ function AudienceSection() {
           {AUDIENCES.map((audience) => (
             <article
               key={audience.title}
-              className={`${audience.tone} group flex min-h-[76px] items-center gap-4 rounded-[22px] border border-white/70 p-4 shadow-[0_16px_38px_rgba(59,43,101,0.08)] ring-1 ring-[#e7ddfb]/70 transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_58px_rgba(86,52,180,0.14)] sm:min-h-[92px] sm:rounded-[26px]`}
+              className="group flex min-h-[76px] items-center gap-4 rounded-[22px] border border-[#e9e1f6] bg-white/95 p-4 ring-1 ring-white/80 transition duration-300 hover:-translate-y-0.5 hover:border-[#d8c9ff] sm:min-h-[92px] sm:rounded-[26px]"
             >
               <span
-                className={`${audience.iconTone} flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-white shadow-[0_12px_26px_rgba(67,47,112,0.10)] ring-1 ring-[#eee7fb] transition group-hover:scale-105 sm:h-12 sm:w-12 sm:rounded-[16px]`}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-[#eadfff] bg-white text-[#7c3aed] transition group-hover:scale-105 group-hover:border-[#d8c9ff] sm:h-12 sm:w-12 sm:rounded-[16px]"
               >
                 <Icon name={audience.icon} className="h-[18px] w-[18px]" />
               </span>
