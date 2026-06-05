@@ -541,12 +541,9 @@ export default function Home() {
           <PocketSection />
           <StudyEcosystemSection />
           <PlanSection
-            courseOptions={courseOptions}
             displayPlans={displayPlans}
-            onCourseChange={setSelectedCourseId}
             pricingError={pricingError}
             pricingLoading={pricingLoading}
-            selectedCourseId={selectedCourse?.courseId || ''}
           />
           <StepsSection />
           <TestimonialsSection />
@@ -899,19 +896,13 @@ function StudyEcosystemSection() {
 }
 
 function PlanSection({
-  courseOptions,
   displayPlans,
-  onCourseChange,
   pricingError,
   pricingLoading,
-  selectedCourseId,
 }: {
-  courseOptions: CourseSummary[]
   displayPlans: DisplayPlan[]
-  onCourseChange: (courseId: string) => void
   pricingError: string
   pricingLoading: boolean
-  selectedCourseId: string
 }) {
   const router = useRouter()
 
@@ -977,30 +968,6 @@ function PlanSection({
             One subscription. Unlimited focused study time, accountability and community.
           </p>
         </div>
-
-        {courseOptions.length > 0 && (
-          <div className="mx-auto mt-7 max-w-md">
-            <label className="block text-left">
-              <span className="mb-2 block text-sm font-bold text-[#786f89]">
-                Preparing for
-              </span>
-              <span className="relative block">
-                <select
-                  value={selectedCourseId}
-                  onChange={(event) => onCourseChange(event.target.value)}
-                  className="h-[52px] w-full appearance-none rounded-[18px] border border-[#e4daf2] bg-white px-4 py-3 pr-11 text-base font-extrabold text-[#171322] shadow-[0_14px_34px_rgba(48,32,88,0.08)] outline-none transition focus:border-[#7c3aed] focus:ring-4 focus:ring-[#ede7ff]"
-                >
-                  {courseOptions.map((course) => (
-                    <option key={course.courseId} value={course.courseId}>
-                      {course.title || 'Virtual Library Access'}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDownIcon className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7c3aed]" />
-              </span>
-            </label>
-          </div>
-        )}
 
         <div className="mt-4 min-h-5 text-center text-xs font-bold text-[#786f89]">
           {pricingLoading && 'Checking latest checkout prices...'}

@@ -42,19 +42,19 @@ export default function VirtualStudyHero({
             {eyebrowText}
           </p>
 
-          <h1 className="mt-4 max-w-[25rem] text-[2.85rem] font-bold leading-[1.02] tracking-normal text-[#050509] sm:max-w-[38rem] sm:text-[4rem] lg:max-w-3xl lg:text-[4.85rem] xl:text-[5.15rem]">
-            Stay{' '}
+          <h1 className="mt-4 max-w-[25rem] text-[2.32rem] font-bold leading-[1.08] tracking-normal text-[#050509] min-[390px]:text-[2.48rem] sm:max-w-[40rem] sm:text-[3.45rem] lg:max-w-3xl lg:text-[3.48rem] xl:text-[3.86rem]">
+            Struggling to stay{' '}
             <span className="bg-[linear-gradient(90deg,#265cff_0%,#7c3aed_52%,#8b22ff_100%)] bg-clip-text text-transparent">
               consistent
             </span>{' '}
-            from home
+            with studies at home?
           </h1>
 
           <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[#625b74] sm:text-lg sm:leading-8">
-            Join 3000+ aspirants in 24x7 study rooms built for focus, discipline, and accountability.
+            Join 3000+ aspirants studying daily in a 24x7 Virtual Library built for focus, discipline, and accountability.
           </p>
 
-          <div className="mt-6 grid w-full max-w-md grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:max-w-lg">
+          <div className="mt-4 grid w-full max-w-[22rem] grid-cols-2 gap-2 sm:mt-5 sm:max-w-md sm:gap-3 lg:max-w-[30rem]">
             {PROOF_CARDS.map((card) => (
               <ProofCard key={card.title} {...card} />
             ))}
@@ -68,19 +68,19 @@ export default function VirtualStudyHero({
           />
         </div>
 
-        <div className="relative z-10 mx-auto flex w-full max-w-[23rem] justify-center sm:max-w-[26rem] lg:mx-0 lg:max-w-[34rem] xl:max-w-[36rem]">
-          <div className="relative h-[17rem] w-full sm:h-[22rem] lg:h-[35rem] xl:h-[39rem]">
+        <div className="relative z-10 mx-auto flex w-full max-w-[22rem] justify-center sm:max-w-[26rem] lg:mx-0 lg:max-w-[34rem] xl:max-w-[36rem]">
+          <div className="relative h-[12.25rem] w-full sm:h-[19rem] lg:h-[35rem] xl:h-[39rem]">
             <div
               className="absolute -inset-x-8 -bottom-8 -top-5 overflow-hidden sm:-inset-x-12 sm:-bottom-10 sm:-top-8"
               style={{
-                WebkitMaskImage: 'linear-gradient(180deg,#000 0%,#000 76%,rgba(0,0,0,0.72) 86%,rgba(0,0,0,0) 100%)',
-                maskImage: 'linear-gradient(180deg,#000 0%,#000 76%,rgba(0,0,0,0.72) 86%,rgba(0,0,0,0) 100%)',
+                WebkitMaskImage: 'linear-gradient(180deg,#000 0%,#000 58%,rgba(0,0,0,0.68) 73%,rgba(0,0,0,0) 100%)',
+                maskImage: 'linear-gradient(180deg,#000 0%,#000 58%,rgba(0,0,0,0.68) 73%,rgba(0,0,0,0) 100%)',
               }}
             >
               <img
                 src={HERO_LIVE_ROOM_IMAGE}
                 alt="Virtual Library app live study room with students studying together"
-                className="pointer-events-none absolute left-1/2 top-4 h-[33rem] -translate-x-1/2 object-contain drop-shadow-[0_36px_96px_rgba(69,31,149,0.18)] sm:top-6 sm:h-[41rem] lg:h-[50rem] xl:h-[54rem]"
+                className="pointer-events-none absolute left-1/2 top-3 h-[30rem] -translate-x-1/2 object-contain drop-shadow-[0_36px_96px_rgba(69,31,149,0.18)] sm:top-5 sm:h-[38rem] lg:h-[50rem] xl:h-[54rem]"
               />
             </div>
           </div>
@@ -143,18 +143,18 @@ function ProofCard({
   description: string
 }) {
   return (
-    <div className="flex min-h-[5rem] min-w-0 items-center gap-2.5 rounded-[16px] border border-[#ebe7f6] bg-white/95 px-3 py-2.5 text-left shadow-[0_10px_22px_rgba(48,31,90,0.05)] min-[420px]:gap-2 min-[420px]:px-2.5 lg:min-h-[6.1rem] lg:gap-4 lg:rounded-[20px] lg:px-4 lg:py-3">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eee8ff] text-[#5b2ee5] min-[420px]:h-9 min-[420px]:w-9 lg:h-14 lg:w-14">
-        {icon === 'clock' ? <ClockIcon className="h-5 w-5 min-[420px]:h-[18px] min-[420px]:w-[18px] lg:h-7 lg:w-7" /> : <UsersIcon className="h-5 w-5 min-[420px]:h-[18px] min-[420px]:w-[18px] lg:h-7 lg:w-7" />}
+    <div className="flex min-h-[4.35rem] min-w-0 items-center gap-2 rounded-[14px] border border-[#ebe7f6] bg-white/95 px-2.5 py-2 text-left shadow-[0_10px_22px_rgba(48,31,90,0.05)] sm:min-h-[5rem] sm:gap-2.5 sm:rounded-[16px] sm:px-3 sm:py-2.5 lg:min-h-[4.75rem] lg:px-3 xl:min-h-[5rem] xl:gap-3 xl:px-3.5">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eee8ff] text-[#5b2ee5] sm:h-10 sm:w-10 lg:h-10 lg:w-10 xl:h-11 xl:w-11">
+        {icon === 'clock' ? <ClockIcon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-[18px] lg:w-[18px] xl:h-5 xl:w-5" /> : <UsersIcon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-[18px] lg:w-[18px] xl:h-5 xl:w-5" />}
       </span>
       <span className="min-w-0">
-        <span className="block whitespace-nowrap text-[0.82rem] font-bold leading-4 text-[#070711] min-[420px]:text-[0.7rem] min-[460px]:text-[0.76rem] sm:text-sm lg:text-base lg:leading-5">
+        <span className="block whitespace-nowrap text-[0.66rem] font-bold leading-3 text-[#070711] min-[380px]:text-[0.69rem] sm:text-sm sm:leading-4 lg:text-[0.82rem] xl:text-[0.9rem] xl:leading-5">
           {title}
         </span>
-        <span className="mt-0.5 block text-xs font-medium leading-4 text-[#625b74] min-[420px]:text-[0.66rem] min-[460px]:text-[0.7rem] sm:text-xs lg:text-base lg:leading-6">
+        <span className="mt-1 block text-[0.58rem] font-medium leading-[0.85rem] text-[#625b74] min-[380px]:text-[0.61rem] sm:text-xs sm:leading-4 lg:text-xs lg:leading-4 xl:text-sm xl:leading-5">
           {description}
         </span>
-        <span className="mt-1.5 block h-0.5 w-8 rounded-full bg-[#6d28d9] lg:mt-2 lg:h-1 lg:w-10" aria-hidden="true" />
+        <span className="mt-1 block h-0.5 w-7 rounded-full bg-[#6d28d9] sm:mt-1.5 sm:w-8 lg:w-8 xl:mt-2 xl:w-9" aria-hidden="true" />
       </span>
     </div>
   )
