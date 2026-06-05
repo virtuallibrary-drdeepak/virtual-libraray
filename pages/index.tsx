@@ -7,6 +7,8 @@ import SiteNavbar from '@/components/SiteNavbar'
 import {
   apiFetch,
   BillingPlan,
+  CourseOptionsResponse,
+  CourseSummary,
   formatCurrency,
   PublicBillingPlansResponse,
 } from '@/lib/payment-client'
@@ -17,6 +19,7 @@ const HERO_ICONS_IMAGE = '/img/v2/hero_asset/icons.png'
 const ECOSYSTEM_IMAGE = '/img/v2/ecosystem.png'
 const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
 const APP_STORE_HREF = 'https://apps.apple.com/'
+const DEFAULT_COURSE_SLUG = 'neet-pg'
 
 type IconName =
   | 'video'
@@ -351,6 +354,8 @@ const FALLBACK_PLANS: DisplayPlan[] = [
 
 export default function Home() {
   const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [availableCourses, setAvailableCourses] = useState<CourseSummary[]>([])
+  const [selectedCourseId, setSelectedCourseId] = useState('')
   const [pricingLoading, setPricingLoading] = useState(true)
   const [pricingError, setPricingError] = useState('')
 
@@ -359,17 +364,26 @@ export default function Home() {
 
     async function loadPlans() {
       try {
-        const response = await apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
-          headers: {
-            Accept: 'application/json',
-          },
-        })
+        const [response, courseResponse] = await Promise.all([
+          apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
+            headers: {
+              Accept: 'application/json',
+            },
+          }),
+          apiFetch<CourseOptionsResponse>('/courses/options', {
+            skipAuth: true,
+            headers: {
+              Accept: 'application/json',
+            },
+          }).catch(() => null),
+        ])
 
         if (!isMounted) {
           return
         }
 
         setPlans(sortPlans(response.plans || []))
+        setAvailableCourses(sortCourseOptions(courseResponse?.courses || []))
         setPricingError('')
       } catch (error) {
         if (!isMounted) {
@@ -392,30 +406,47 @@ export default function Home() {
     }
   }, [])
 
-  const displayPlans = useMemo(() => {
-    if (!plans.length) {
-      return FALLBACK_PLANS
+  const courseOptions = useMemo(() => mergeCourseOptions(availableCourses, getCourseOptionsFromPlans(plans)), [availableCourses, plans])
+  const selectedCourse = useMemo(
+    () => getSelectedCourseOption(courseOptions, selectedCourseId),
+    [courseOptions, selectedCourseId]
+  )
+
+  useEffect(() => {
+    if (!courseOptions.length) {
+      return
     }
 
-    const recommendedPlanId = getRecommendedPlanId(plans)
-    const plansByDuration = new Map<number, BillingPlan>()
+    setSelectedCourseId((currentCourseId) => {
+      if (courseOptions.some((course) => course.courseId === currentCourseId)) {
+        return currentCourseId
+      }
 
-    plans.forEach((plan) => {
-      if (!plansByDuration.has(plan.durationMonths)) {
-        plansByDuration.set(plan.durationMonths, plan)
+      return getDefaultCourseId(courseOptions)
+    })
+  }, [courseOptions])
+
+  const displayPlans = useMemo(() => {
+    if (!plans.length) {
+      return FALLBACK_PLANS.map((fallback) => withCheckoutCourse(fallback, selectedCourse))
+    }
+
+    const selectedCoursePlans = getPlansForCourse(plans, selectedCourseId)
+    const recommendedPlanId = getRecommendedPlanId(selectedCoursePlans)
+    const livePlansByDuration = new Map<number, BillingPlan>()
+
+    selectedCoursePlans.forEach((plan) => {
+      const existingPlan = livePlansByDuration.get(plan.durationMonths)
+
+      if (!existingPlan || plan.amountPaise < existingPlan.amountPaise) {
+        livePlansByDuration.set(plan.durationMonths, plan)
       }
     })
 
-    return FALLBACK_PLANS.map((fallback) => {
-      const plan = plansByDuration.get(fallback.durationMonths)
-
-      if (!plan) {
-        return fallback
-      }
-
-      return getDisplayPlanFromBillingPlan(plan, fallback, plan.planId === recommendedPlanId)
+    return Array.from(livePlansByDuration.values()).map((plan) => {
+      return getDisplayPlanFromBillingPlan(plan, plan.planId === recommendedPlanId, selectedCourse)
     })
-  }, [plans])
+  }, [plans, selectedCourse, selectedCourseId])
 
   return (
     <>
@@ -439,9 +470,12 @@ export default function Home() {
           <PocketSection />
           <StudyEcosystemSection />
           <PlanSection
+            courseOptions={courseOptions}
             displayPlans={displayPlans}
+            onCourseChange={setSelectedCourseId}
             pricingError={pricingError}
             pricingLoading={pricingLoading}
+            selectedCourseId={selectedCourse?.courseId || ''}
           />
           <StepsSection />
           <TestimonialsSection />
@@ -488,7 +522,7 @@ function HeroSection() {
                   src={HERO_BACKGROUND_IMAGE}
                   alt=""
                   aria-hidden="true"
-                  className="h-full w-full object-cover opacity-55 saturate-[0.86] blur-[0.4px] lg:opacity-42"
+                  className="h-full w-full object-cover opacity-72 saturate-[0.95] blur-[0.25px] lg:opacity-60"
                 />
                 <div className="absolute inset-x-0 top-0 h-[28%] bg-[linear-gradient(180deg,#fbf8ff_0%,rgba(251,248,255,0.82)_36%,rgba(251,248,255,0)_100%)] backdrop-blur-[2px]" />
                 <div className="absolute inset-x-0 bottom-0 h-[36%] bg-[linear-gradient(180deg,rgba(251,248,255,0)_0%,rgba(251,248,255,0.9)_58%,#fbf8ff_100%)] backdrop-blur-[2px]" />
@@ -502,7 +536,7 @@ function HeroSection() {
                 src={HERO_ICONS_IMAGE}
                 alt=""
                 aria-hidden="true"
-                className="pointer-events-none absolute left-1/2 top-[50%] z-30 w-[108%] -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-[0_18px_34px_rgba(38,24,76,0.15)] lg:w-[98%]"
+                className="pointer-events-none absolute left-1/2 top-[50%] z-30 w-[96%] -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-[0_14px_28px_rgba(38,24,76,0.14)] sm:w-[92%] lg:w-[84%]"
               />
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 h-[30%] bg-[linear-gradient(180deg,rgba(251,248,255,0)_0%,rgba(251,248,255,0.88)_58%,#fbf8ff_100%)]" />
             </div>
@@ -806,13 +840,19 @@ function StudyEcosystemSection() {
 }
 
 function PlanSection({
+  courseOptions,
   displayPlans,
+  onCourseChange,
   pricingError,
   pricingLoading,
+  selectedCourseId,
 }: {
+  courseOptions: CourseSummary[]
   displayPlans: DisplayPlan[]
+  onCourseChange: (courseId: string) => void
   pricingError: string
   pricingLoading: boolean
+  selectedCourseId: string
 }) {
   const router = useRouter()
 
@@ -878,6 +918,30 @@ function PlanSection({
             One subscription. Unlimited focused study time, accountability and community.
           </p>
         </div>
+
+        {courseOptions.length > 0 && (
+          <div className="mx-auto mt-7 max-w-md">
+            <label className="block text-left">
+              <span className="mb-2 block text-sm font-bold text-[#786f89]">
+                Preparing for
+              </span>
+              <span className="relative block">
+                <select
+                  value={selectedCourseId}
+                  onChange={(event) => onCourseChange(event.target.value)}
+                  className="h-[52px] w-full appearance-none rounded-[18px] border border-[#e4daf2] bg-white px-4 py-3 pr-11 text-base font-extrabold text-[#171322] shadow-[0_14px_34px_rgba(48,32,88,0.08)] outline-none transition focus:border-[#7c3aed] focus:ring-4 focus:ring-[#ede7ff]"
+                >
+                  {courseOptions.map((course) => (
+                    <option key={course.courseId} value={course.courseId}>
+                      {course.title || 'Virtual Library Access'}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7c3aed]" />
+              </span>
+            </label>
+          </div>
+        )}
 
         <div className="mt-4 min-h-5 text-center text-xs font-bold text-[#786f89]">
           {pricingLoading && 'Checking latest checkout prices...'}
@@ -1410,6 +1474,70 @@ function sortPlans(plans: BillingPlan[]) {
   })
 }
 
+function getCourseOptionsFromPlans(plans: BillingPlan[]) {
+  const courses = new Map<string, CourseSummary>()
+
+  plans.forEach((plan) => {
+    if (!plan.course?.courseId || courses.has(plan.course.courseId)) {
+      return
+    }
+
+    courses.set(plan.course.courseId, plan.course)
+  })
+
+  return sortCourseOptions(Array.from(courses.values()))
+}
+
+function mergeCourseOptions(primaryCourses: CourseSummary[], fallbackCourses: CourseSummary[]) {
+  const courses = new Map<string, CourseSummary>()
+
+  primaryCourses.forEach((course) => {
+    if (course.courseId) {
+      courses.set(course.courseId, course)
+    }
+  })
+
+  fallbackCourses.forEach((course) => {
+    if (course.courseId && !courses.has(course.courseId)) {
+      courses.set(course.courseId, course)
+    }
+  })
+
+  return sortCourseOptions(Array.from(courses.values()))
+}
+
+function sortCourseOptions(courses: CourseSummary[]) {
+  return [...courses].sort((left, right) => {
+    if ((left.displayOrder || 0) !== (right.displayOrder || 0)) {
+      return (left.displayOrder || 0) - (right.displayOrder || 0)
+    }
+
+    return left.title.localeCompare(right.title)
+  })
+}
+
+function getDefaultCourseId(courses: CourseSummary[]) {
+  return courses.find(isDefaultCourse)?.courseId || courses[0]?.courseId || ''
+}
+
+function getSelectedCourseOption(courses: CourseSummary[], selectedCourseId: string) {
+  return courses.find((course) => course.courseId === selectedCourseId) || courses.find(isDefaultCourse) || courses[0] || null
+}
+
+function getPlansForCourse(plans: BillingPlan[], selectedCourseId: string) {
+  const selectedCoursePlans = selectedCourseId
+    ? plans.filter((plan) => plan.course.courseId === selectedCourseId)
+    : []
+
+  if (selectedCoursePlans.length) {
+    return selectedCoursePlans
+  }
+
+  const defaultCoursePlans = plans.filter((plan) => isDefaultCourse(plan.course))
+
+  return defaultCoursePlans.length ? defaultCoursePlans : plans
+}
+
 function getRecommendedPlanId(plans: BillingPlan[]) {
   if (!plans.length) {
     return ''
@@ -1426,8 +1554,8 @@ function getRecommendedPlanId(plans: BillingPlan[]) {
 
 function getDisplayPlanFromBillingPlan(
   plan: BillingPlan,
-  fallback: DisplayPlan,
-  isRecommended: boolean
+  isRecommended: boolean,
+  selectedCourse: CourseSummary | null
 ): DisplayPlan {
   const savingsPercent = getPlanSavingsPercent(plan.durationMonths)
   const originalAmountPaise = getOriginalAmountPaise(plan.amountPaise, savingsPercent)
@@ -1436,7 +1564,6 @@ function getDisplayPlanFromBillingPlan(
   const monthlyEquivalent = formatMonthlyEquivalent(plan)
 
   return {
-    ...fallback,
     key: plan.planId,
     title: formatPlanTitle(plan.durationMonths),
     durationMonths: plan.durationMonths,
@@ -1451,10 +1578,50 @@ function getDisplayPlanFromBillingPlan(
         : `≈ ${monthlyEquivalent}/Month${plan.durationMonths >= 24 ? ' — Max Savings' : ''}`,
     savingsText: savingsAmountPaise
       ? `You save ${formatCurrency(savingsAmountPaise, plan.currency)} vs regular price!`
-      : fallback.savingsText,
-    href: `/payment?source=home&planId=${encodeURIComponent(plan.planId)}&durationMonths=${plan.durationMonths}`,
-    badge: fallback.badge || (isRecommended ? 'MOST POPULAR' : undefined),
+      : 'Complete Virtual Library access for your selected duration.',
+    href: buildPaymentHref(plan.durationMonths, selectedCourse || plan.course, plan.planId),
+    badge: isRecommended ? 'MOST POPULAR' : undefined,
+    featured: false,
   }
+}
+
+function withCheckoutCourse(plan: DisplayPlan, selectedCourse: CourseSummary | null) {
+  return {
+    ...plan,
+    href: buildPaymentHref(plan.durationMonths, selectedCourse),
+  }
+}
+
+function buildPaymentHref(durationMonths: number, selectedCourse: CourseSummary | null, planId?: string) {
+  const params = new URLSearchParams({
+    source: 'home',
+    durationMonths: String(durationMonths),
+  })
+
+  if (planId) {
+    params.set('planId', planId)
+  }
+
+  if (selectedCourse?.courseId) {
+    params.set('courseId', selectedCourse.courseId)
+  } else {
+    params.set('courseSlug', selectedCourse?.slug || DEFAULT_COURSE_SLUG)
+  }
+
+  return `/payment?${params.toString()}`
+}
+
+function isDefaultCourse(course?: CourseSummary | null) {
+  if (!course) {
+    return false
+  }
+
+  return [course.slug, course.title, course.courseId]
+    .some((value) => normalizeCourseKey(value || '') === 'neetpg')
+}
+
+function normalizeCourseKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function formatPlanTitle(durationMonths: number) {

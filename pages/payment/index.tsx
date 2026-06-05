@@ -149,6 +149,8 @@ const MOBILE_CONTEXT_QUERY_KEYS = [
   'source',
 ]
 const DEFAULT_PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || '2026-06-04'
+const DEFAULT_PUBLIC_COURSE_SLUG = 'neet-pg'
+const DEFAULT_PUBLIC_COURSE_KEY = 'neetpg'
 
 export default function PaymentPage() {
   const router = useRouter()
@@ -219,11 +221,14 @@ export default function PaymentPage() {
   const [privacyPolicyVersion] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
 
   const planIdFromQuery = getQueryParam(router.query.planId)
+  const courseIdFromQuery = getQueryParam(router.query.courseId)
+  const courseSlugFromQuery = getQueryParam(router.query.courseSlug)
+  const durationMonthsFromQuery = getQueryNumber(router.query.durationMonths)
   const paymentStatusFromQuery = getQueryParam(router.query.paymentStatus)
   const checkoutSource = getQueryParam(router.query.source)
   const checkoutMode = getQueryParam(router.query.mode)
   const isLegacyCheckoutFlow = checkoutMode === 'legacy'
-  const isPrimaryPaymentLinksFlow = !isLegacyCheckoutFlow && Boolean(planIdFromQuery || paymentStatusFromQuery)
+  const isPrimaryPaymentLinksFlow = !isLegacyCheckoutFlow && Boolean(planIdFromQuery || durationMonthsFromQuery || paymentStatusFromQuery)
   const shouldUseV2WebFallback = checkoutSource === 'v2-neet-pg'
   const shouldLoadCheckoutScript = router.isReady && isLegacyCheckoutFlow
   const isSessionPaymentLinkCheckout = isPrimaryPaymentLinksFlow && Boolean(sessionUser)
@@ -266,7 +271,7 @@ export default function PaymentPage() {
       })
   }, [plans])
 
-  const activeCourseId = selectedPlan?.course.courseId || selectedCourse?.courseId || groupedPlans[0]?.course.courseId || ''
+  const activeCourseId = selectedCourse?.courseId || selectedPlan?.course.courseId || groupedPlans[0]?.course.courseId || ''
   const activeGroup = useMemo(() => {
     return groupedPlans.find((group) => group.course.courseId === activeCourseId) || groupedPlans[0] || null
   }, [activeCourseId, groupedPlans])
@@ -541,7 +546,7 @@ export default function PaymentPage() {
       return
     }
 
-    if (planIdFromQuery) {
+    if (planIdFromQuery || durationMonthsFromQuery) {
       await loadPublicPlanForPayment(planIdFromQuery)
       return
     }
@@ -641,7 +646,7 @@ export default function PaymentPage() {
         return
       }
 
-      const nextPlanId = getDefaultPlanId(availablePlans, undefined, getQueryNumber(router.query.durationMonths))
+      const nextPlanId = getDefaultPlanId(availablePlans, undefined, durationMonthsFromQuery)
       const nextPlan = availablePlans.find((plan) => plan.planId === nextPlanId)
       const nextCourse = nextPlan?.course || data.course || availablePlans[0]?.course || null
 
@@ -658,7 +663,7 @@ export default function PaymentPage() {
     }
   }
 
-  async function loadPublicPlanForPayment(requestedPlanId: string) {
+  async function loadPublicPlanForPayment(requestedPlanId?: string) {
     try {
       setScreen('booting')
       const [data, user, checkoutCourses] = await Promise.all([
@@ -680,12 +685,18 @@ export default function PaymentPage() {
 
         return left.amountPaise - right.amountPaise
       })
-      const matchingPlan = availablePlans.find((plan) => plan.planId === requestedPlanId)
+      const matchingPlan = getRequestedPublicCheckoutPlan(availablePlans, {
+        requestedCourseId: courseIdFromQuery,
+        requestedCourseSlug: courseSlugFromQuery,
+        requestedDurationMonths: durationMonthsFromQuery,
+        requestedPlanId,
+      })
+      const requestedCourse = getRequestedCourseFromOptions(checkoutCourses?.courses || [], courseIdFromQuery, courseSlugFromQuery)
 
       if (!availablePlans.length || !matchingPlan) {
         setPlans(availablePlans)
         setSelectedPlanId('')
-        setSelectedCourse(data.course || availablePlans[0]?.course || null)
+        setSelectedCourse(requestedCourse || data.course || availablePlans[0]?.course || null)
         setScreen('error')
         setPageError('Selected plan is no longer available. Please return to pricing and choose again.')
         return
@@ -693,7 +704,7 @@ export default function PaymentPage() {
 
       const nextCourse = shouldUseV2WebFallback
         ? null
-        : matchingPlan.course || data.course || availablePlans[0]?.course || null
+        : requestedCourse || matchingPlan.course || data.course || availablePlans[0]?.course || null
 
       setPlans(availablePlans)
       setSelectedCourse(nextCourse)
@@ -1376,6 +1387,7 @@ export default function PaymentPage() {
         method: 'POST',
         body: JSON.stringify({
           planId: selectedPlan.planId,
+          courseId: selectedCourse?.courseId,
           couponCode: getCouponCodeForSubmit(activeCouponCode),
         }),
       })
@@ -1440,6 +1452,7 @@ export default function PaymentPage() {
           skipAuth: !sessionUser,
           body: JSON.stringify({
             planId: selectedPlan.planId,
+            courseId: selectedCourse?.courseId,
             ...(!sessionUser ? customerPayload : {}),
             couponCode: couponCodeForSubmit,
           }),
@@ -4150,6 +4163,102 @@ function getPlanTag(plan: BillingPlan, popularPlanId: string) {
   }
 
   return null
+}
+
+function getRequestedPublicCheckoutPlan(
+  plans: BillingPlan[],
+  query: {
+    requestedCourseId?: string
+    requestedCourseSlug?: string
+    requestedDurationMonths?: number | null
+    requestedPlanId?: string
+  }
+) {
+  if (!plans.length) {
+    return null
+  }
+
+  if (query.requestedPlanId) {
+    const planMatch = plans.find((plan) => plan.planId === query.requestedPlanId)
+
+    if (planMatch) {
+      return planMatch
+    }
+  }
+
+  const courseScopedPlans = getPublicCheckoutCoursePlans(plans, query.requestedCourseId, query.requestedCourseSlug)
+  const candidatePlans = courseScopedPlans.length ? courseScopedPlans : plans
+
+  if (query.requestedDurationMonths) {
+    const durationMatch = candidatePlans.find((plan) => plan.durationMonths === query.requestedDurationMonths)
+
+    if (durationMatch) {
+      return durationMatch
+    }
+
+    return null
+  }
+
+  return candidatePlans.find((plan) => plan.planId === getDefaultPlanId(candidatePlans)) || candidatePlans[0] || null
+}
+
+function getPublicCheckoutCoursePlans(plans: BillingPlan[], requestedCourseId?: string, requestedCourseSlug?: string) {
+  if (requestedCourseId) {
+    const courseIdMatches = plans.filter((plan) => plan.course.courseId === requestedCourseId)
+
+    if (courseIdMatches.length) {
+      return courseIdMatches
+    }
+  }
+
+  const requestedCourseKey = normalizeCourseQueryKey(requestedCourseSlug || DEFAULT_PUBLIC_COURSE_SLUG)
+  const courseMatches = plans.filter((plan) => {
+    return [plan.course.slug, plan.course.title, plan.course.courseId]
+      .some((value) => normalizeCourseQueryKey(value || '') === requestedCourseKey)
+  })
+
+  if (courseMatches.length) {
+    return courseMatches
+  }
+
+  return plans.filter((plan) => isDefaultPublicCourse(plan.course))
+}
+
+function getRequestedCourseFromOptions(courses: CourseSummary[], requestedCourseId?: string, requestedCourseSlug?: string) {
+  if (requestedCourseId) {
+    const courseIdMatch = courses.find((course) => course.courseId === requestedCourseId)
+
+    if (courseIdMatch) {
+      return courseIdMatch
+    }
+  }
+
+  if (requestedCourseSlug) {
+    const requestedCourseKey = normalizeCourseQueryKey(requestedCourseSlug)
+    const courseSlugMatch = courses.find((course) => {
+      return [course.slug, course.title, course.courseId]
+        .some((value) => normalizeCourseQueryKey(value || '') === requestedCourseKey)
+    })
+
+    if (courseSlugMatch) {
+      return courseSlugMatch
+    }
+  }
+
+  return null
+}
+
+function isDefaultPublicCourse(course?: CourseSummary | null) {
+  if (!course) {
+    return false
+  }
+
+  return [course.slug, course.title, course.courseId]
+    .some((value) => normalizeCourseQueryKey(value || '') === DEFAULT_PUBLIC_COURSE_KEY)
+}
+
+function normalizeCourseQueryKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function getDefaultPlanId(plans: BillingPlan[], requestedPlanId?: string, requestedDurationMonths?: number | null) {

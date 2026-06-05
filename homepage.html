@@ -1,0 +1,1940 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Virtual Library - Study Consistently From Home</title>
+  <meta name="description" content="Join Virtual Library for 24/7 live study rooms, focus tools, rankings, study partners, and accountability for serious aspirants.">
+  <style>
+    :root {
+      --ink: #090713;
+      --muted: #6f6781;
+      --purple: #6d35df;
+      --purple-dark: #5121ba;
+      --purple-soft: #eee7ff;
+      --line: #e5deee;
+      --surface: #ffffff;
+      --bg: #f7f6fb;
+      --green: #079669;
+      --orange: #ff6b1a;
+      --shadow: 0 18px 44px rgba(48, 32, 88, 0.08);
+      --shadow-strong: 0 30px 78px rgba(33, 22, 82, 0.25);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    img,
+    svg {
+      display: block;
+    }
+
+    img {
+      max-width: 100%;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .container {
+      width: min(100% - 32px, 1152px);
+      margin-inline: auto;
+    }
+
+    .section {
+      padding: 72px 0;
+      overflow: hidden;
+    }
+
+    .section-light {
+      background: linear-gradient(180deg, #ffffff 0%, #fbf8ff 100%);
+    }
+
+    .section-white {
+      background: #ffffff;
+    }
+
+    .section-purple {
+      background: linear-gradient(180deg, #f3edff 0%, #fbf8ff 100%);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      min-height: 32px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: #e4d8ff;
+      color: var(--purple);
+      padding: 7px 18px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      box-shadow: 0 12px 30px rgba(109, 53, 223, 0.12);
+    }
+
+    .section-header {
+      max-width: 760px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .section-header h2 {
+      max-width: 760px;
+      margin: 18px auto 0;
+      font-size: clamp(1.75rem, 4.5vw, 3.1rem);
+      line-height: 1.08;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .section-header p {
+      max-width: 690px;
+      margin: 16px auto 0;
+      color: #8a6fb8;
+      font-size: clamp(0.95rem, 2vw, 1.2rem);
+      font-weight: 600;
+      line-height: 1.65;
+    }
+
+    .icon {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+    }
+
+    .icon-sm {
+      width: 16px;
+      height: 16px;
+    }
+
+    .btn {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 14px;
+      padding: 0 20px;
+      font-weight: 800;
+      transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, color 180ms ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--purple);
+      color: #ffffff;
+      box-shadow: 0 18px 34px rgba(109, 53, 223, 0.24);
+    }
+
+    .btn-primary:hover {
+      background: var(--purple-dark);
+    }
+
+    .btn-secondary {
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      box-shadow: 0 12px 26px rgba(35, 24, 70, 0.05);
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid #ece7f4;
+      background: #ffffff;
+      box-shadow: 0 8px 24px rgba(48, 32, 88, 0.06);
+    }
+
+    .nav-shell {
+      display: flex;
+      height: 64px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand img {
+      height: 32px;
+      width: auto;
+    }
+
+    .desktop-nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      color: #575069;
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    .desktop-nav a:hover {
+      color: var(--purple);
+    }
+
+    .mobile-toggle {
+      display: none;
+    }
+
+    .mobile-toggle-label {
+      display: none;
+      width: 42px;
+      height: 42px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #ffffff;
+      color: var(--ink);
+      box-shadow: 0 10px 22px rgba(48, 32, 88, 0.06);
+      cursor: pointer;
+    }
+
+    .mobile-nav {
+      display: none;
+      border-top: 1px solid #eee8f7;
+      background: linear-gradient(180deg, #ffffff, #fbf8ff);
+      padding: 10px 16px 16px;
+    }
+
+    .mobile-nav a {
+      display: flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid #eee8f7;
+      border-radius: 16px;
+      background: #ffffff;
+      padding: 0 16px;
+      color: #575069;
+      font-weight: 800;
+      box-shadow: 0 8px 22px rgba(48, 32, 88, 0.04);
+    }
+
+    .mobile-nav a + a {
+      margin-top: 8px;
+    }
+
+    .hero {
+      position: relative;
+      background: linear-gradient(145deg, #f2f8ff 0%, #fff6fb 100%);
+    }
+
+    .hero-inner {
+      display: grid;
+      min-height: calc(100vh - 64px);
+      grid-template-rows: auto auto auto minmax(260px, 1fr) auto;
+      align-items: center;
+      justify-items: center;
+      gap: 18px;
+      padding: 42px 0 24px;
+      text-align: center;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      border-radius: 999px;
+      background: #ddecff;
+      color: #185cff;
+      padding: 9px 18px;
+      font-size: 0.86rem;
+      font-weight: 900;
+      box-shadow: 0 12px 28px rgba(37, 92, 255, 0.08);
+    }
+
+    .hero h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(2.25rem, 8vw, 4.9rem);
+      line-height: 1.04;
+      font-weight: 950;
+      letter-spacing: 0;
+    }
+
+    .gradient-text {
+      background: linear-gradient(90deg, #265cff 0%, #8b22ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .hero-copy {
+      max-width: 850px;
+      margin: 0;
+      color: #747083;
+      font-size: clamp(1rem, 2.2vw, 1.25rem);
+      font-weight: 650;
+      line-height: 1.6;
+    }
+
+    .hero-art {
+      position: relative;
+      isolation: isolate;
+      width: min(100%, 720px);
+      height: min(34vh, 310px);
+      min-height: 250px;
+      overflow: hidden;
+    }
+
+    .hero-art::before {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      z-index: -1;
+      width: 80%;
+      height: 75%;
+      border-radius: 999px;
+      background: rgba(124, 58, 237, 0.12);
+      filter: blur(46px);
+      content: "";
+      transform: translate(-50%, -50%);
+    }
+
+    .hero-background {
+      position: absolute;
+      inset: 8% 0 1%;
+      z-index: 0;
+      width: 100%;
+      height: calc(100% - 9%);
+      object-fit: cover;
+      opacity: 0.68;
+      filter: saturate(0.95) blur(0.25px);
+    }
+
+    .hero-phone {
+      position: absolute;
+      bottom: -32%;
+      left: 50%;
+      z-index: 2;
+      height: 132%;
+      width: auto;
+      max-width: none;
+      object-fit: contain;
+      filter: drop-shadow(0 30px 58px rgba(38, 24, 76, 0.22));
+      transform: translateX(-50%);
+    }
+
+    .hero-icons {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 3;
+      width: 92%;
+      max-width: none;
+      object-fit: contain;
+      filter: drop-shadow(0 14px 28px rgba(38, 24, 76, 0.14));
+      transform: translate(-50%, -50%);
+    }
+
+    .hero-fade {
+      position: absolute;
+      inset-inline: 0;
+      bottom: 0;
+      z-index: 4;
+      height: 34%;
+      background: linear-gradient(180deg, rgba(251, 248, 255, 0) 0%, rgba(251, 248, 255, 0.88) 58%, #fbf8ff 100%);
+      pointer-events: none;
+    }
+
+    .hero-actions {
+      display: grid;
+      width: min(100%, 760px);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .store-button {
+      display: flex;
+      min-height: 56px;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: #ffffff;
+      padding: 0 20px;
+      font-size: 1.05rem;
+      font-weight: 850;
+      box-shadow: 0 12px 26px rgba(35, 24, 70, 0.05);
+    }
+
+    .store-divider {
+      width: 1px;
+      height: 28px;
+      background: #d8d3df;
+    }
+
+    .stats-strip {
+      background: #050505;
+      color: #ffffff;
+    }
+
+    .stats-grid {
+      display: grid;
+      max-width: 980px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .stat {
+      padding: 16px 18px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: clamp(1.75rem, 4vw, 2.2rem);
+      line-height: 1;
+      font-weight: 950;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 8px;
+      font-size: 0.95rem;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 22px;
+      margin-top: 48px;
+    }
+
+    .feature-card {
+      min-height: 252px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 28px;
+      box-shadow: var(--shadow);
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .feature-card:hover {
+      border-color: #c7b3ff;
+      box-shadow: 0 28px 70px rgba(90, 54, 180, 0.14);
+      transform: translateY(-4px);
+    }
+
+    .icon-tile {
+      display: flex;
+      width: 56px;
+      height: 56px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d9caff;
+      border-radius: 20px;
+      background: linear-gradient(145deg, #efe7ff, #ddcdff);
+      color: #753ee6;
+      box-shadow: 0 14px 30px rgba(117, 62, 230, 0.16);
+    }
+
+    .feature-card h3 {
+      margin: 24px 0 0;
+      font-size: 1.08rem;
+      line-height: 1.35;
+      font-weight: 900;
+    }
+
+    .feature-card p {
+      margin: 14px 0 0;
+      color: #76629b;
+      font-size: 0.94rem;
+      font-weight: 650;
+      line-height: 1.65;
+    }
+
+    .comparison-section {
+      position: relative;
+      background: linear-gradient(180deg, #ffffff 0%, #fbf8ff 44%, #f3edff 100%);
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 28px;
+      margin-top: 52px;
+    }
+
+    .comparison-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #eee7f4;
+      border-radius: 34px;
+      padding: 32px;
+      box-shadow: 0 28px 80px rgba(52, 38, 88, 0.13);
+    }
+
+    .comparison-card h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+
+    .comparison-card ul {
+      display: grid;
+      gap: 16px;
+      margin: 26px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .comparison-card li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      color: #403447;
+      font-size: 0.95rem;
+      font-weight: 700;
+      line-height: 1.55;
+    }
+
+    .comparison-card .check-dot,
+    .comparison-card .x-dot {
+      display: inline-flex;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      box-shadow: 0 8px 20px rgba(20, 12, 42, 0.12);
+    }
+
+    .alone-card {
+      background: linear-gradient(145deg, #ffffff 0%, #fffafa 58%, #fff4f1 100%);
+      color: #ff4b4b;
+    }
+
+    .alone-card .x-dot {
+      border: 1px solid #ffd5d5;
+      background: #ffe7e7;
+      color: #ff4b4b;
+    }
+
+    .together-card {
+      border-color: rgba(255, 255, 255, 0.14);
+      background: radial-gradient(circle at 88% 92%, rgba(190, 163, 255, 0.98) 0%, rgba(126, 65, 231, 0.96) 37%, rgba(35, 25, 84, 0.98) 68%, #11162d 100%);
+      color: #ffffff;
+      box-shadow: 0 34px 90px rgba(91, 48, 196, 0.34);
+    }
+
+    .together-card li {
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .together-card .check-dot {
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+    }
+
+    .center-action {
+      margin-top: 34px;
+      text-align: center;
+    }
+
+    .audience-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 44px;
+    }
+
+    .audience-card {
+      display: flex;
+      min-height: 92px;
+      align-items: center;
+      gap: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 26px;
+      padding: 16px;
+      box-shadow: 0 16px 38px rgba(59, 43, 101, 0.08);
+    }
+
+    .audience-card h3 {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.35;
+      font-weight: 850;
+    }
+
+    .audience-icon {
+      display: flex;
+      width: 48px;
+      height: 48px;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #eee7fb;
+      border-radius: 16px;
+      background: #ffffff;
+      color: var(--purple);
+      box-shadow: 0 12px 26px rgba(67, 47, 112, 0.1);
+    }
+
+    .tone-1 {
+      background: #fff4df;
+    }
+
+    .tone-2 {
+      background: #e7fae7;
+    }
+
+    .tone-3 {
+      background: #fff2e3;
+    }
+
+    .tone-4 {
+      background: #e8ddff;
+    }
+
+    .tone-5 {
+      background: #fbffc9;
+    }
+
+    .tone-6 {
+      background: #e1e1e1;
+    }
+
+    .pocket-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 0.82fr;
+      gap: 44px;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 32px;
+      background: radial-gradient(circle at 78% 16%, rgba(124, 58, 237, 0.48), transparent 34%), radial-gradient(circle at 18% 4%, rgba(255, 255, 255, 0.12), transparent 30%), linear-gradient(135deg, #11172f 0%, #24164f 48%, #151a33 100%);
+      padding: 48px;
+      color: #ffffff;
+      box-shadow: var(--shadow-strong);
+    }
+
+    .pocket-card h2 {
+      max-width: 640px;
+      margin: 24px 0 0;
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      line-height: 1.18;
+      font-weight: 950;
+    }
+
+    .pocket-card p {
+      max-width: 600px;
+      color: rgba(255, 255, 255, 0.66);
+      font-weight: 700;
+      line-height: 1.65;
+    }
+
+    .dark-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      padding: 9px 14px;
+      color: #eee8ff;
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .chip {
+      display: inline-flex;
+      min-height: 36px;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 0 14px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .pocket-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .pocket-stat {
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.075);
+      padding: 24px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 18px 44px rgba(0, 0, 0, 0.14);
+      backdrop-filter: blur(8px);
+    }
+
+    .pocket-stat strong {
+      display: block;
+      font-size: clamp(1.8rem, 4vw, 2.25rem);
+      line-height: 1;
+      font-weight: 950;
+    }
+
+    .pocket-stat span {
+      display: block;
+      margin-top: 10px;
+      color: rgba(255, 255, 255, 0.54);
+      font-size: 0.78rem;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .ecosystem {
+      background: linear-gradient(180deg, #ffffff 0%, #fbf8ff 42%, #eee8ff 100%);
+    }
+
+    .ecosystem-grid {
+      display: grid;
+      grid-template-columns: 0.88fr 1.12fr;
+      gap: 48px;
+      align-items: center;
+    }
+
+    .ecosystem h2 {
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1.12;
+      font-weight: 950;
+    }
+
+    .ecosystem p {
+      margin: 18px 0 0;
+      color: #8a6fb8;
+      font-size: clamp(1rem, 2.3vw, 1.35rem);
+      font-weight: 650;
+      line-height: 1.5;
+    }
+
+    .ecosystem-art {
+      position: relative;
+    }
+
+    .ecosystem-art::before {
+      position: absolute;
+      inset-inline: 12%;
+      bottom: 5%;
+      height: 70px;
+      border-radius: 999px;
+      background: rgba(109, 53, 223, 0.18);
+      filter: blur(42px);
+      content: "";
+    }
+
+    .ecosystem-art img {
+      position: relative;
+      width: 100%;
+      filter: drop-shadow(0 28px 38px rgba(42, 25, 91, 0.16));
+    }
+
+    .pricing-note {
+      min-height: 20px;
+      margin-top: 16px;
+      color: #786f89;
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 38px;
+    }
+
+    .plan-card {
+      position: relative;
+      display: flex;
+      min-height: 210px;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.94);
+      padding: 24px;
+      box-shadow: 0 14px 34px rgba(48, 32, 88, 0.07);
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .plan-card:hover {
+      border-color: #c7b3ff;
+      box-shadow: 0 22px 54px rgba(82, 48, 170, 0.13);
+      transform: translateY(-3px);
+    }
+
+    .plan-featured {
+      border-color: #7c3aed;
+      background: #f7f2ff;
+    }
+
+    .plan-popular {
+      border-color: rgba(255, 107, 26, 0.75);
+    }
+
+    .plan-top {
+      display: flex;
+      min-height: 78px;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .plan-card h3 {
+      margin: 0;
+      font-size: 1.22rem;
+      font-weight: 900;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 0.62rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .badge-save {
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: #d9fbe9;
+      color: var(--green);
+    }
+
+    .badge-popular {
+      background: linear-gradient(135deg, #ff7a2f, #ff3f6c);
+      color: #ffffff;
+      box-shadow: 0 10px 22px rgba(255, 77, 92, 0.2);
+    }
+
+    .plan-card .monthly {
+      margin: 0;
+      color: #7b728b;
+      font-size: 0.9rem;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+
+    .plan-price {
+      margin-top: auto;
+    }
+
+    .plan-price .old {
+      color: #a8a2b1;
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-decoration: line-through;
+    }
+
+    .plan-price .price {
+      margin-top: 4px;
+      font-size: 2rem;
+      line-height: 1;
+      font-weight: 950;
+    }
+
+    .plan-continue {
+      display: inline-flex;
+      width: 100%;
+      min-height: 40px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 18px;
+      border-radius: 999px;
+      background: #7c3aed;
+      color: #ffffff;
+      font-size: 0.88rem;
+      font-weight: 900;
+      box-shadow: 0 12px 26px rgba(109, 53, 223, 0.22);
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 22px;
+      margin-top: 44px;
+    }
+
+    .step-card {
+      position: relative;
+      display: flex;
+      min-height: 226px;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: 28px;
+      padding: 30px;
+      box-shadow: var(--shadow);
+      transition: transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .step-card:hover {
+      box-shadow: 0 28px 70px rgba(82, 48, 170, 0.14);
+      transform: translateY(-4px);
+    }
+
+    .step-card strong {
+      color: #c7a9ee;
+      font-size: 4rem;
+      line-height: 1;
+      font-weight: 950;
+    }
+
+    .step-card h3 {
+      margin: 18px 0 0;
+      font-size: 1.45rem;
+      font-weight: 950;
+    }
+
+    .step-card p {
+      flex: 1;
+      margin: 12px 0 0;
+      color: #4d465a;
+      font-weight: 650;
+      line-height: 1.65;
+    }
+
+    .step-link {
+      display: inline-flex;
+      width: fit-content;
+      min-height: 36px;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      padding: 0 16px;
+      color: var(--purple);
+      font-size: 0.78rem;
+      font-weight: 900;
+      box-shadow: 0 12px 28px rgba(72, 48, 120, 0.08);
+    }
+
+    .testimonials-track {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 42px;
+    }
+
+    .testimonial-card {
+      position: relative;
+      min-height: 245px;
+      overflow: hidden;
+      border: 1px solid #d8c9ff;
+      border-radius: 24px;
+      background: #ffffff;
+      padding: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .testimonial-card::before {
+      position: absolute;
+      left: 20px;
+      top: 8px;
+      color: #e7dcff;
+      content: "\201C";
+      font-size: 4rem;
+      font-weight: 950;
+      line-height: 1;
+    }
+
+    .testimonial-card p {
+      position: relative;
+      margin: 34px 0 0;
+      font-size: 0.98rem;
+      font-weight: 700;
+      line-height: 1.7;
+    }
+
+    .testimonial-bottom {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .person strong {
+      display: block;
+      color: var(--purple);
+      font-weight: 900;
+    }
+
+    .person span {
+      display: block;
+      margin-top: 4px;
+      color: #9aa0ad;
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #8ce7bd;
+      border-radius: 999px;
+      background: #effff7;
+      color: var(--green);
+      padding: 7px 10px;
+      font-size: 0.76rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .rating-card {
+      max-width: 860px;
+      margin: 32px auto 0;
+      border-radius: 22px;
+      background: #fff4df;
+      padding: 18px 22px;
+      box-shadow: 0 14px 34px rgba(48, 32, 88, 0.07);
+      color: #4d465a;
+      font-weight: 750;
+    }
+
+    .rating-card strong {
+      color: var(--ink);
+    }
+
+    .stars {
+      color: #ffb703;
+      font-weight: 950;
+      letter-spacing: 0;
+    }
+
+    .final-cta {
+      background: linear-gradient(180deg, #ffffff 0%, #f5f1ff 100%);
+    }
+
+    .final-card {
+      position: relative;
+      overflow: hidden;
+      max-width: 980px;
+      margin-inline: auto;
+      border-radius: 30px;
+      background: #151a35;
+      padding: 56px 32px;
+      color: #ffffff;
+      text-align: center;
+      box-shadow: 0 30px 74px rgba(26, 18, 52, 0.28);
+    }
+
+    .final-card::before {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 0%, rgba(124, 58, 237, 0.36), transparent 40%);
+      content: "";
+    }
+
+    .final-card > * {
+      position: relative;
+    }
+
+    .final-card .label {
+      color: #c8b9ff;
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .final-card h2 {
+      max-width: 690px;
+      margin: 18px auto 0;
+      font-size: clamp(2rem, 6vw, 3.3rem);
+      line-height: 1.1;
+      font-weight: 950;
+    }
+
+    .final-card p {
+      max-width: 670px;
+      margin: 18px auto 0;
+      color: rgba(255, 255, 255, 0.66);
+      font-weight: 700;
+      line-height: 1.65;
+    }
+
+    .final-actions {
+      display: grid;
+      max-width: 520px;
+      gap: 12px;
+      margin: 30px auto 0;
+    }
+
+    .dual-store {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px;
+      overflow: hidden;
+      border-radius: 14px;
+      background: #ffffff;
+      color: #171322;
+    }
+
+    .dual-store a {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      font-weight: 850;
+    }
+
+    .dual-store a:first-child {
+      border-right: 1px solid var(--line);
+    }
+
+    .site-footer {
+      background: #f1f1f3;
+      padding: 48px 0 24px;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.72fr 0.72fr 1fr;
+      gap: 42px;
+      align-items: start;
+    }
+
+    .footer-logo {
+      height: 36px;
+      width: auto;
+    }
+
+    .footer-copy {
+      max-width: 330px;
+      color: #8a8791;
+      font-size: 0.92rem;
+      font-weight: 650;
+      line-height: 1.65;
+    }
+
+    .social-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .social-row a {
+      display: flex;
+      width: 38px;
+      height: 38px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #8a8791;
+      box-shadow: 0 10px 24px rgba(48, 32, 88, 0.06);
+    }
+
+    .footer-col h3 {
+      margin: 0;
+      color: #8a8791;
+      font-size: 0.76rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .footer-col nav {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+      color: #171322;
+      font-size: 0.9rem;
+      font-weight: 780;
+    }
+
+    .footer-col a:hover,
+    .footer-bottom a:hover {
+      color: var(--purple);
+    }
+
+    .footer-store-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .footer-store-grid a {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 0 12px;
+      font-weight: 850;
+      box-shadow: 0 10px 24px rgba(48, 32, 88, 0.06);
+    }
+
+    .footer-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 38px;
+      border-top: 1px solid #cfcdd4;
+      padding-top: 20px;
+      color: #4d465a;
+      font-size: 0.78rem;
+      font-weight: 650;
+    }
+
+    .footer-bottom-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+    }
+
+    @media (max-width: 1024px) {
+      .desktop-nav,
+      .nav-cta {
+        display: none;
+      }
+
+      .mobile-toggle-label {
+        display: flex;
+      }
+
+      .mobile-toggle:checked ~ .mobile-nav {
+        display: block;
+      }
+
+      .hero-inner {
+        min-height: auto;
+        padding: 34px 0 24px;
+      }
+
+      .features-grid,
+      .plans-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .audience-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .pocket-card,
+      .ecosystem-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .ecosystem-grid {
+        text-align: center;
+      }
+
+      .ecosystem p,
+      .ecosystem h2 {
+        margin-inline: auto;
+      }
+
+      .testimonials-track {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .footer-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .section {
+        padding: 56px 0;
+      }
+
+      .container {
+        width: min(100% - 28px, 1152px);
+      }
+
+      .hero-inner {
+        grid-template-rows: auto auto auto minmax(220px, auto) auto;
+        gap: 14px;
+        padding-top: 28px;
+      }
+
+      .hero h1 {
+        font-size: clamp(2.15rem, 11vw, 3.35rem);
+      }
+
+      .hero-copy {
+        font-size: 0.98rem;
+      }
+
+      .hero-art {
+        height: 280px;
+        min-height: 220px;
+      }
+
+      .hero-actions,
+      .comparison-grid,
+      .steps-grid,
+      .features-grid,
+      .plans-grid,
+      .testimonials-track,
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .store-button {
+        min-height: 54px;
+        font-size: 0.98rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .feature-card {
+        display: grid;
+        min-height: auto;
+        grid-template-columns: auto 1fr;
+        gap: 16px;
+        padding: 20px;
+      }
+
+      .feature-card .icon-tile {
+        width: 50px;
+        height: 50px;
+        border-radius: 18px;
+      }
+
+      .feature-card h3 {
+        margin-top: 0;
+      }
+
+      .feature-card p {
+        grid-column: 2;
+        margin-top: -4px;
+      }
+
+      .comparison-card,
+      .pocket-card,
+      .step-card,
+      .testimonial-card,
+      .final-card {
+        border-radius: 24px;
+        padding: 24px;
+      }
+
+      .audience-grid,
+      .pocket-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .audience-card {
+        min-height: 78px;
+        border-radius: 22px;
+      }
+
+      .plan-card {
+        min-height: 176px;
+      }
+
+      .plan-top {
+        min-height: auto;
+      }
+
+      .testimonial-bottom {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .dual-store {
+        grid-template-columns: minmax(0, 1fr) 76px;
+      }
+
+      .footer-bottom {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="icon-arrow" viewBox="0 0 24 24">
+      <path d="M5 12h14M13 5l7 7-7 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+    </symbol>
+    <symbol id="icon-trophy" viewBox="0 0 24 24">
+      <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4zM17 6h3a3 3 0 0 1-3 3M7 6H4a3 3 0 0 0 3 3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-video" viewBox="0 0 24 24">
+      <path d="M4.5 7.5A2.5 2.5 0 0 1 7 5h7a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 14 19H7a2.5 2.5 0 0 1-2.5-2.5v-9zM16.5 9.5l3.5-2v9l-3.5-2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-focus" viewBox="0 0 24 24">
+      <path d="M12 8v4l2.5 2.5M5 3 3 5M19 3l2 2M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-heart" viewBox="0 0 24 24">
+      <path d="M20.4 5.6a5 5 0 0 0-7.1 0L12 6.9l-1.3-1.3a5 5 0 0 0-7.1 7.1L12 21l8.4-8.3a5 5 0 0 0 0-7.1z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24">
+      <path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-users" viewBox="0 0 24 24">
+      <path d="M16 19v-1.5A3.5 3.5 0 0 0 12.5 14h-5A3.5 3.5 0 0 0 4 17.5V19M10 10.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 19v-1.2a3 3 0 0 0-2.2-2.9M16.5 4a3 3 0 0 1 0 5.8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-leaf" viewBox="0 0 24 24">
+      <path d="M5 19c8 0 14-6 14-14-8 0-14 6-14 14zM5 19c3.5-4.5 7-7.5 14-14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-target" viewBox="0 0 24 24">
+      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-chat" viewBox="0 0 24 24">
+      <path d="M4.5 6.8A3.3 3.3 0 0 1 7.8 3.5h8.4a3.3 3.3 0 0 1 3.3 3.3v5.9a3.3 3.3 0 0 1-3.3 3.3H10l-5.5 4.5V6.8zM8 8.5h8M8 12h5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="M5 12.5l4 4L19 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+    </symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24">
+      <path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+    </symbol>
+    <symbol id="icon-spark" viewBox="0 0 24 24">
+      <path d="M12 3l1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3zM19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24">
+      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+    </symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24">
+      <path fill="#34a853" d="M4.46 3.21c-.3.19-.46.54-.46 1.01v15.56c0 .48.16.82.46 1.01l8.17-8.8-8.17-8.78Z"></path>
+      <path fill="#4285f4" d="M13.57 11 16.1 8.28 6.17 2.72c-.24-.14-.47-.2-.68-.2l8.08 8.48Z"></path>
+      <path fill="#fbbc04" d="M13.57 13 5.49 21.48c.21 0 .44-.06.68-.2l9.93-5.56L13.57 13Z"></path>
+      <path fill="#ea4335" d="M19.49 10.14 17.22 8.87 14.48 12l2.74 3.13 2.27-1.27c.68-.38 1.05-.99 1.05-1.86s-.37-1.48-1.05-1.86Z"></path>
+    </symbol>
+    <symbol id="icon-apple" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M16.52 12.48c-.02-2.02 1.65-2.99 1.72-3.03-.94-1.37-2.4-1.56-2.92-1.58-1.24-.13-2.42.73-3.05.73-.63 0-1.6-.71-2.63-.69-1.35.02-2.59.78-3.29 1.99-1.4 2.43-.36 6.03 1.01 8.01.67.97 1.47 2.06 2.52 2.02 1.01-.04 1.39-.65 2.61-.65 1.22 0 1.56.65 2.63.63 1.08-.02 1.77-.99 2.44-1.97.77-1.12 1.08-2.2 1.1-2.26-.02-.01-2.12-.81-2.14-3.2ZM14.51 6.56c.56-.68.94-1.62.83-2.56-.8.03-1.76.53-2.33 1.21-.51.59-.96 1.55-.84 2.46.89.07 1.79-.45 2.34-1.11Z"></path>
+    </symbol>
+    <symbol id="icon-instagram" viewBox="0 0 24 24">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="2"></rect>
+      <circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="2"></circle>
+      <circle cx="17.2" cy="6.8" r="1.1" fill="currentColor"></circle>
+    </symbol>
+    <symbol id="icon-youtube" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M21.3 7.2a3 3 0 0 0-2.1-2.1C17.35 4.6 12 4.6 12 4.6s-5.35 0-7.2.5a3 3 0 0 0-2.1 2.1A31.2 31.2 0 0 0 2.2 12a31.2 31.2 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.85.5 7.2.5 7.2.5s5.35 0 7.2-.5a3 3 0 0 0 2.1-2.1c.5-1.85.5-4.8.5-4.8s0-2.95-.5-4.8zM10.1 15.5v-7l5.7 3.5-5.7 3.5z"></path>
+    </symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24">
+      <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+    </symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="container nav-shell">
+      <a class="brand" href="#" aria-label="Virtual Library home">
+        <img src="public/img/logo.svg" alt="Virtual Library">
+      </a>
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#plans">Plans</a>
+        <a href="#steps">How it works</a>
+        <a href="#testimonials">Stories</a>
+      </nav>
+      <a class="btn btn-primary nav-cta" href="#plans">Join now</a>
+      <label class="mobile-toggle-label" for="mobile-toggle" aria-label="Open navigation menu">
+        <svg class="icon"><use href="#icon-menu"></use></svg>
+      </label>
+    </div>
+    <input class="mobile-toggle" id="mobile-toggle" type="checkbox" aria-hidden="true">
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <a href="#features">Features <svg class="icon-sm"><use href="#icon-arrow"></use></svg></a>
+      <a href="#plans">Plans <svg class="icon-sm"><use href="#icon-arrow"></use></svg></a>
+      <a href="#steps">How it works <svg class="icon-sm"><use href="#icon-arrow"></use></svg></a>
+      <a href="#testimonials">Stories <svg class="icon-sm"><use href="#icon-arrow"></use></svg></a>
+      <a href="#plans">Join now <svg class="icon-sm"><use href="#icon-arrow"></use></svg></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-inner">
+        <p class="hero-pill">
+          <svg class="icon-sm"><use href="#icon-trophy"></use></svg>
+          India's first Virtual Library Space
+        </p>
+        <h1>
+          Struggling to stay<br>
+          <span class="gradient-text">consistent</span> with studies<br>
+          at home?
+        </h1>
+        <p class="hero-copy">Join 3000+ aspirants studying daily in a 24x7 Virtual Library built for focus, discipline, and accountability.</p>
+        <div class="hero-art" aria-label="Virtual Library app preview">
+          <img class="hero-background" src="public/img/v2/hero_asset/background.png" alt="">
+          <img class="hero-phone" src="public/img/v2/hero_asset/phone.png" alt="Virtual Library app dashboard on a phone">
+          <img class="hero-icons" src="public/img/v2/hero_asset/icons.png" alt="">
+          <span class="hero-fade" aria-hidden="true"></span>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#plans">
+            Join Virtual Library Now
+            <svg class="icon"><use href="#icon-arrow"></use></svg>
+          </a>
+          <div class="store-button" id="download">
+            <span>Download on</span>
+            <a href="https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary" target="_blank" rel="noreferrer" aria-label="Download on Google Play">
+              <svg class="icon"><use href="#icon-play"></use></svg>
+            </a>
+            <span class="store-divider" aria-hidden="true"></span>
+            <a href="https://apps.apple.com/" target="_blank" rel="noreferrer" aria-label="Download on App Store">
+              <svg class="icon" style="color:#8b8b8b"><use href="#icon-apple"></use></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="stats-strip">
+        <div class="stats-grid">
+          <div class="stat"><strong>24/7</strong><span>Active Study Rooms</span></div>
+          <div class="stat"><strong>3,000+</strong><span>Active Members</span></div>
+          <div class="stat"><strong>60% +</strong><span>Female Members</span></div>
+          <div class="stat"><strong>8 Hrs +</strong><span>Study Time</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-light" id="features">
+      <div class="container">
+        <div class="section-header">
+          <h2>Everything You Need to Succeed</h2>
+          <p>All features designed to help you maintain consistency, focus, and accountability.</p>
+        </div>
+        <div class="features-grid">
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-video"></use></svg></span>
+            <div>
+              <h3>24x7 Live Virtual Study Rooms</h3>
+              <p>Study with serious aspirants anytime. Cameras on, distractions off.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-focus"></use></svg></span>
+            <div>
+              <h3>Focus Mode App Blocker</h3>
+              <p>Block distracting apps while studying. Stay focused with full control over your phone.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-heart"></use></svg></span>
+            <div>
+              <h3>Live Mental Health Sessions</h3>
+              <p>Expert led sessions to help students manage stress, burnout, anxiety, and exam pressure.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-chart"></use></svg></span>
+            <div>
+              <h3>Revision Tracker</h3>
+              <p>Spaced repetition system with customizable reminders.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-users"></use></svg></span>
+            <div>
+              <h3>Female - Only Community</h3>
+              <p>A safe and focused environment built exclusively for female aspirants.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-leaf"></use></svg></span>
+            <div>
+              <h3>Daily Meditation &amp; Yoga Sessions</h3>
+              <p>30 min. morning and evening sessions to improve focus, reduce stress, and boost mental clarity.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-target"></use></svg></span>
+            <div>
+              <h3>Goal Tracking</h3>
+              <p>Personal progress monitoring and milestone tracking.</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <span class="icon-tile"><svg class="icon"><use href="#icon-chat"></use></svg></span>
+            <div>
+              <h3>Community Support</h3>
+              <p>Exam-specific communities for doubt discussions and sharing study materials.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section comparison-section">
+      <div class="container">
+        <div class="section-header">
+          <span class="eyebrow">Why we're different</span>
+          <h2>Studying alone vs studying together</h2>
+          <p>The difference isn't the syllabus. It's the environment around it.</p>
+        </div>
+        <div class="comparison-grid">
+          <article class="comparison-card alone-card">
+            <h3>Studying at home, alone</h3>
+            <ul>
+              <li><span class="x-dot"><svg class="icon-sm"><use href="#icon-x"></use></svg></span>Loneliness while studying alone</li>
+              <li><span class="x-dot"><svg class="icon-sm"><use href="#icon-x"></use></svg></span>Inconsistent daily routine</li>
+              <li><span class="x-dot"><svg class="icon-sm"><use href="#icon-x"></use></svg></span>Constant phone distractions</li>
+              <li><span class="x-dot"><svg class="icon-sm"><use href="#icon-x"></use></svg></span>Procrastination spirals</li>
+              <li><span class="x-dot"><svg class="icon-sm"><use href="#icon-x"></use></svg></span>Burnout with no support</li>
+              <li><span class="x-dot"><svg class="icon-sm"><use href="#icon-x"></use></svg></span>No one to hold you accountable</li>
+            </ul>
+          </article>
+          <article class="comparison-card together-card">
+            <h3>With Virtual Library</h3>
+            <ul>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>24x7 live study rooms with real aspirants</li>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>Daily rankings, streaks &amp; accountability</li>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>Built-in focus mode &amp; app blocker</li>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>Peer support &amp; Find Study partners</li>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>Doubt discussions &amp; study material sharing</li>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>Mentors, psychiatrists &amp; wellness sessions</li>
+              <li><span class="check-dot"><svg class="icon-sm"><use href="#icon-check"></use></svg></span>Exam-specific WhatsApp &amp; Telegram communities</li>
+            </ul>
+          </article>
+        </div>
+        <div class="center-action">
+          <a class="btn btn-secondary" href="#plans">Join now</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-purple">
+      <div class="container">
+        <div class="section-header">
+          <span class="eyebrow">Who it's for</span>
+          <h2>Built for serious aspirants</h2>
+          <p>If you're studying long hours from home, this is your ecosystem.</p>
+        </div>
+        <div class="audience-grid">
+          <article class="audience-card tone-1"><span class="audience-icon"><svg class="icon"><use href="#icon-heart"></use></svg></span><h3>NEET PG aspirants</h3></article>
+          <article class="audience-card tone-2"><span class="audience-icon"><svg class="icon"><use href="#icon-trophy"></use></svg></span><h3>MBBS &amp; College Students</h3></article>
+          <article class="audience-card tone-3"><span class="audience-icon"><svg class="icon"><use href="#icon-focus"></use></svg></span><h3>NEET SS / NEET MDS aspirants</h3></article>
+          <article class="audience-card tone-4"><span class="audience-icon"><svg class="icon"><use href="#icon-chart"></use></svg></span><h3>UPSC CSE aspirants</h3></article>
+          <article class="audience-card tone-5"><span class="audience-icon"><svg class="icon"><use href="#icon-target"></use></svg></span><h3>NEET UG / IIT-JEE students</h3></article>
+          <article class="audience-card tone-6"><span class="audience-icon"><svg class="icon"><use href="#icon-video"></use></svg></span><h3>SSC / Railway exam aspirants</h3></article>
+          <article class="audience-card tone-1"><span class="audience-icon"><svg class="icon"><use href="#icon-heart"></use></svg></span><h3>NORCET &amp; Nursing exam aspirants</h3></article>
+          <article class="audience-card tone-2"><span class="audience-icon"><svg class="icon"><use href="#icon-chart"></use></svg></span><h3>State PSC aspirants</h3></article>
+          <article class="audience-card tone-3"><span class="audience-icon"><svg class="icon"><use href="#icon-trophy"></use></svg></span><h3>All Banking exams</h3></article>
+          <article class="audience-card tone-4"><span class="audience-icon"><svg class="icon"><use href="#icon-users"></use></svg></span><h3>Working professionals</h3></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-white">
+      <div class="container">
+        <div class="pocket-card">
+          <div>
+            <span class="dark-pill"><svg class="icon-sm"><use href="#icon-spark"></use></svg> India's largest online study ecosystem</span>
+            <h2>You'll never have to study alone again.</h2>
+            <p>Live sessions, study buddy groups, emotional support, and a productive environment built around the psychology of consistency.</p>
+            <div class="chips">
+              <span class="chip"><svg class="icon-sm"><use href="#icon-users"></use></svg> Study buddies</span>
+              <span class="chip"><svg class="icon-sm"><use href="#icon-chat"></use></svg> Doubt circles</span>
+              <span class="chip"><svg class="icon-sm"><use href="#icon-heart"></use></svg> Mental wellness</span>
+            </div>
+          </div>
+          <div class="pocket-stats">
+            <div class="pocket-stat"><strong>3,000+</strong><span>Serious Aspirants</span></div>
+            <div class="pocket-stat"><strong>1.2M+</strong><span>Hours studied together</span></div>
+            <div class="pocket-stat"><strong>20+</strong><span>Competitive Exams</span></div>
+            <div class="pocket-stat"><strong>60%+</strong><span>Female members</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section ecosystem">
+      <div class="container ecosystem-grid">
+        <div>
+          <h2>Carry your study ecosystem in your pocket</h2>
+          <p>Everything you need to learn - organized, synced, and always within reach.</p>
+        </div>
+        <div class="ecosystem-art">
+          <img src="public/img/v2/ecosystem.png" alt="Virtual Library app screens for study rooms, focus mode, and sessions">
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-white" id="plans">
+      <div class="container">
+        <div class="section-header">
+          <span class="eyebrow">Limited time offer</span>
+          <h2>Choose Your Plan</h2>
+          <p>One subscription. Unlimited focused study time, accountability and community.</p>
+        </div>
+        <p class="pricing-note">Static prices shown below. Checkout can confirm the final active price.</p>
+        <div class="plans-grid">
+          <a class="plan-card plan-featured" href="#download">
+            <div class="plan-top">
+              <h3>1 Month</h3>
+              <div class="badges"><span class="badge badge-save">Save 30%</span></div>
+              <p class="monthly">&#8377;699/month &middot; Billed monthly</p>
+            </div>
+            <div class="plan-price">
+              <div class="old">&#8377;999</div>
+              <div class="price">&#8377;699</div>
+            </div>
+            <span class="plan-continue">Continue <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+          <a class="plan-card plan-popular" href="#download">
+            <div class="plan-top">
+              <h3>6 Months</h3>
+              <div class="badges"><span class="badge badge-popular">Popular</span><span class="badge badge-save">Save 33%</span></div>
+              <p class="monthly">&#8377;333/month &middot; Billed &#8377;1,999</p>
+            </div>
+            <div class="plan-price">
+              <div class="old">&#8377;3,000</div>
+              <div class="price">&#8377;1,999</div>
+            </div>
+            <span class="plan-continue">Continue <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+          <a class="plan-card" href="#download">
+            <div class="plan-top">
+              <h3>12 Months</h3>
+              <div class="badges"><span class="badge badge-save">Save 40%</span></div>
+              <p class="monthly">&#8377;250/month &middot; Billed &#8377;2,999</p>
+            </div>
+            <div class="plan-price">
+              <div class="old">&#8377;5,000</div>
+              <div class="price">&#8377;2,999</div>
+            </div>
+            <span class="plan-continue">Continue <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+          <a class="plan-card" href="#download">
+            <div class="plan-top">
+              <h3>24 Months</h3>
+              <div class="badges"><span class="badge badge-save">Save 42%</span></div>
+              <p class="monthly">&#8377;167/month &middot; Billed &#8377;3,999</p>
+            </div>
+            <div class="plan-price">
+              <div class="old">&#8377;7,000</div>
+              <div class="price">&#8377;3,999</div>
+            </div>
+            <span class="plan-continue">Continue <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-white" id="steps">
+      <div class="container">
+        <div class="section-header">
+          <h2>Start Studying In 3 Steps</h2>
+          <p>Get started in minutes and join thousands of focused NEET-PG aspirants.</p>
+        </div>
+        <div class="steps-grid">
+          <a class="step-card" href="#plans" style="background:linear-gradient(145deg,#fff7e8,#fff1da)">
+            <strong>01</strong>
+            <h3>Choose Your Plan</h3>
+            <p>Select a subscription that fits your preparation timeline.</p>
+            <span class="step-link">View plans <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+          <a class="step-card" href="#plans" style="background:linear-gradient(145deg,#efffea,#e6fbe0)">
+            <strong>02</strong>
+            <h3>Verify &amp; Pay</h3>
+            <p>Complete phone verification and secure Razorpay payment.</p>
+            <span class="step-link">View plans <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+          <a class="step-card" href="https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary" target="_blank" rel="noreferrer" style="background:linear-gradient(145deg,#eee7ff,#ddd2ff)">
+            <strong>03</strong>
+            <h3>Start Learning</h3>
+            <p>Download the app and join thousands of focused aspirants.</p>
+            <span class="step-link">Get the app <svg class="icon-sm"><use href="#icon-arrow"></use></svg></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-light" id="testimonials">
+      <div class="container">
+        <div class="section-header">
+          <span class="eyebrow">Success stories</span>
+          <h2>Loved by aspirants across India</h2>
+          <p>Real students. Real consistency. Real rank improvements.</p>
+        </div>
+        <div class="testimonials-track">
+          <article class="testimonial-card">
+            <p>I finally became consistent. The live rooms keep me accountable every single day.</p>
+            <div class="testimonial-bottom">
+              <div class="person"><strong>Ananya R.</strong><span>UPSC PG aspirant</span></div>
+              <span class="metric"><svg class="icon-sm"><use href="#icon-spark"></use></svg>142 day streak</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>Feels like studying in a real library. I open my laptop and instantly lock in.</p>
+            <div class="testimonial-bottom">
+              <div class="person"><strong>Rohit K.</strong><span>UPSC CSE 2025</span></div>
+              <span class="metric"><svg class="icon-sm"><use href="#icon-clock"></use></svg>8.2 hrs/day avg</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>I stopped feeling alone during preparation. The community is genuinely warm.</p>
+            <div class="testimonial-bottom">
+              <div class="person"><strong>Priya M.</strong><span>NEET UG dropper</span></div>
+              <span class="metric"><svg class="icon-sm"><use href="#icon-trophy"></use></svg>Rank up 4,200+</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>My phone distractions dropped because I had a room to report back to every day.</p>
+            <div class="testimonial-bottom">
+              <div class="person"><strong>Mehak S.</strong><span>NEET PG aspirant</span></div>
+              <span class="metric"><svg class="icon-sm"><use href="#icon-target"></use></svg>31 focused days</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>I use it before office and after dinner. The routine finally feels sustainable.</p>
+            <div class="testimonial-bottom">
+              <div class="person"><strong>Arjun V.</strong><span>Working professional</span></div>
+              <span class="metric"><svg class="icon-sm"><use href="#icon-clock"></use></svg>6.5 hrs/day avg</span>
+            </div>
+          </article>
+          <article class="testimonial-card">
+            <p>The streaks and rankings made progress visible. That changed how I studied.</p>
+            <div class="testimonial-bottom">
+              <div class="person"><strong>Nisha P.</strong><span>Banking aspirant</span></div>
+              <span class="metric"><svg class="icon-sm"><use href="#icon-chart"></use></svg>Top 5% weekly</span>
+            </div>
+          </article>
+        </div>
+        <div class="rating-card">
+          <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div><strong>4.9/5</strong> from 2,400+ reviews &middot; 86% students improve consistency in 21 days</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section final-cta">
+      <div class="container">
+        <div class="final-card">
+          <div class="label">Your rank is waiting.</div>
+          <h2>Start studying <span style="color:#7c3aed">consistently</span> today.</h2>
+          <p>Join the ecosystem that turns intention into 7+ hours of focused study every single day.</p>
+          <div class="final-actions">
+            <a class="btn btn-primary" href="#plans">Join Virtual Library Now <svg class="icon"><use href="#icon-arrow"></use></svg></a>
+            <div class="dual-store">
+              <a href="https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary" target="_blank" rel="noreferrer">
+                Google Play <svg class="icon"><use href="#icon-play"></use></svg>
+              </a>
+              <a href="https://apps.apple.com/" target="_blank" rel="noreferrer" aria-label="Download on App Store">
+                <svg class="icon" style="color:#8a8a8a"><use href="#icon-apple"></use></svg>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <img class="footer-logo" src="public/img/logo.svg" alt="Virtual Library">
+          <p class="footer-copy">India's 24x7 virtual study ecosystem for serious aspirants.</p>
+          <div class="social-row">
+            <a href="https://www.instagram.com/dr.deepak_aanjna/" target="_blank" rel="noreferrer" aria-label="Instagram"><svg class="icon"><use href="#icon-instagram"></use></svg></a>
+            <a href="https://www.youtube.com/@Virtuallibrary.neetpg26" target="_blank" rel="noreferrer" aria-label="YouTube"><svg class="icon"><use href="#icon-youtube"></use></svg></a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <nav>
+            <a href="#features">Features</a>
+            <a href="#plans">Plans</a>
+            <a href="#steps">How it works</a>
+            <a href="#testimonials">Stories</a>
+          </nav>
+        </div>
+        <div class="footer-col">
+          <h3>Legal</h3>
+          <nav>
+            <a href="/terms-and-conditions">Terms &amp; Conditions</a>
+            <a href="/privacy-policy">Privacy Policy</a>
+            <a href="/refund-policy">Refund Policy</a>
+          </nav>
+        </div>
+        <div class="footer-col">
+          <h3>Get the app</h3>
+          <p class="footer-copy">Join rooms, focus sessions, and rankings from your phone.</p>
+          <div class="footer-store-grid">
+            <a href="https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary" target="_blank" rel="noreferrer"><svg class="icon"><use href="#icon-play"></use></svg> Play</a>
+            <a href="https://apps.apple.com/" target="_blank" rel="noreferrer"><svg class="icon" style="color:#8a8a8a"><use href="#icon-apple"></use></svg> iOS</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2025 Virtual Library. All rights reserved.</p>
+        <div class="footer-bottom-links">
+          <a href="/terms-and-conditions">Terms &amp; Conditions</a>
+          <a href="/privacy-policy">Privacy Policy</a>
+          <a href="/refund-policy">Refund Policy</a>
+          <a href="/contact">Support</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
