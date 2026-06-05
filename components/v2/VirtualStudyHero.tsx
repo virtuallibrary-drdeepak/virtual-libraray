@@ -54,26 +54,22 @@ export default function VirtualStudyHero({
             Join 3000+ aspirants in 24x7 study rooms built for focus, discipline, and accountability.
           </p>
 
-          <div className="mt-6 grid w-full max-w-md grid-cols-2 gap-2.5 lg:max-w-lg">
+          <div className="mt-6 grid w-full max-w-md grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:max-w-lg">
             {PROOF_CARDS.map((card) => (
               <ProofCard key={card.title} {...card} />
             ))}
           </div>
 
-          <div className="mt-5 grid w-full max-w-md gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:max-w-xl">
-            <a
-              href={primaryHref}
-              className="inline-flex h-14 items-center justify-center gap-2 rounded-[18px] bg-[#6d28d9] px-6 text-base font-bold text-white shadow-[0_18px_38px_rgba(109,40,217,0.24)] transition hover:bg-[#5b21b6] sm:text-lg"
-            >
-              Join Virtual Library Now
-              <ArrowRightIcon className="h-5 w-5" />
-            </a>
-            <DownloadStoreButton googlePlayHref={googlePlayHref} appStoreHref={appStoreHref} />
-          </div>
+          <HeroActions
+            appStoreHref={appStoreHref}
+            className="mt-5 hidden w-full max-w-xl gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            googlePlayHref={googlePlayHref}
+            primaryHref={primaryHref}
+          />
         </div>
 
         <div className="relative z-10 mx-auto flex w-full max-w-[23rem] justify-center sm:max-w-[26rem] lg:mx-0 lg:max-w-[34rem] xl:max-w-[36rem]">
-          <div className="relative h-[18rem] w-full sm:h-[23rem] lg:h-[35rem] xl:h-[39rem]">
+          <div className="relative h-[17rem] w-full sm:h-[22rem] lg:h-[35rem] xl:h-[39rem]">
             <div
               className="absolute -inset-x-8 -bottom-8 -top-5 overflow-hidden sm:-inset-x-12 sm:-bottom-10 sm:-top-8"
               style={{
@@ -84,11 +80,18 @@ export default function VirtualStudyHero({
               <img
                 src={HERO_LIVE_ROOM_IMAGE}
                 alt="Virtual Library app live study room with students studying together"
-                className="pointer-events-none absolute left-1/2 top-4 h-[34rem] -translate-x-1/2 object-contain drop-shadow-[0_36px_96px_rgba(69,31,149,0.18)] sm:top-6 sm:h-[42rem] lg:h-[50rem] xl:h-[54rem]"
+                className="pointer-events-none absolute left-1/2 top-4 h-[33rem] -translate-x-1/2 object-contain drop-shadow-[0_36px_96px_rgba(69,31,149,0.18)] sm:top-6 sm:h-[41rem] lg:h-[50rem] xl:h-[54rem]"
               />
             </div>
           </div>
         </div>
+
+        <HeroActions
+          appStoreHref={appStoreHref}
+          className="relative z-20 grid w-full max-w-md gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:hidden"
+          googlePlayHref={googlePlayHref}
+          primaryHref={primaryHref}
+        />
       </div>
 
       <div className="relative z-20 border-y border-[#ebe2ff] bg-white/90 backdrop-blur">
@@ -105,6 +108,31 @@ export default function VirtualStudyHero({
   )
 }
 
+function HeroActions({
+  appStoreHref,
+  className,
+  googlePlayHref,
+  primaryHref,
+}: {
+  appStoreHref: string
+  className: string
+  googlePlayHref: string
+  primaryHref: string
+}) {
+  return (
+    <div className={className}>
+      <a
+        href={primaryHref}
+        className="inline-flex h-14 items-center justify-center gap-2 rounded-[18px] bg-[#6d28d9] px-6 text-base font-bold text-white shadow-[0_18px_38px_rgba(109,40,217,0.24)] transition hover:bg-[#5b21b6] sm:text-lg"
+      >
+        Join Virtual Library Now
+        <ArrowRightIcon className="h-5 w-5" />
+      </a>
+      <DownloadStoreButton googlePlayHref={googlePlayHref} appStoreHref={appStoreHref} />
+    </div>
+  )
+}
+
 function ProofCard({
   icon,
   title,
@@ -115,15 +143,18 @@ function ProofCard({
   description: string
 }) {
   return (
-    <div className="inline-flex h-14 min-w-0 items-center gap-2 rounded-full border border-[#ebe7f6] bg-white/95 px-2.5 text-left shadow-[0_12px_28px_rgba(48,31,90,0.06)] sm:gap-2.5 sm:px-3.5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eee8ff] text-[#5b2ee5] sm:h-10 sm:w-10">
-        {icon === 'clock' ? <ClockIcon className="h-[18px] w-[18px] sm:h-5 sm:w-5" /> : <UsersIcon className="h-[18px] w-[18px] sm:h-5 sm:w-5" />}
+    <div className="flex min-h-[5rem] min-w-0 items-center gap-2.5 rounded-[16px] border border-[#ebe7f6] bg-white/95 px-3 py-2.5 text-left shadow-[0_10px_22px_rgba(48,31,90,0.05)] min-[420px]:gap-2 min-[420px]:px-2.5 lg:min-h-[6.1rem] lg:gap-4 lg:rounded-[20px] lg:px-4 lg:py-3">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eee8ff] text-[#5b2ee5] min-[420px]:h-9 min-[420px]:w-9 lg:h-14 lg:w-14">
+        {icon === 'clock' ? <ClockIcon className="h-5 w-5 min-[420px]:h-[18px] min-[420px]:w-[18px] lg:h-7 lg:w-7" /> : <UsersIcon className="h-5 w-5 min-[420px]:h-[18px] min-[420px]:w-[18px] lg:h-7 lg:w-7" />}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[0.74rem] font-bold leading-4 text-[#070711] min-[380px]:text-[0.78rem] sm:text-sm">{title}</span>
-        <span className="hidden text-xs font-medium leading-4 text-[#625b74] xl:block">
+        <span className="block whitespace-nowrap text-[0.82rem] font-bold leading-4 text-[#070711] min-[420px]:text-[0.7rem] min-[460px]:text-[0.76rem] sm:text-sm lg:text-base lg:leading-5">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-xs font-medium leading-4 text-[#625b74] min-[420px]:text-[0.66rem] min-[460px]:text-[0.7rem] sm:text-xs lg:text-base lg:leading-6">
           {description}
         </span>
+        <span className="mt-1.5 block h-0.5 w-8 rounded-full bg-[#6d28d9] lg:mt-2 lg:h-1 lg:w-10" aria-hidden="true" />
       </span>
     </div>
   )
