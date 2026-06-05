@@ -115,12 +115,12 @@ function ProofCard({
   description: string
 }) {
   return (
-    <div className="inline-flex h-14 min-w-0 items-center gap-2.5 rounded-full border border-[#ebe7f6] bg-white/95 px-3 text-left shadow-[0_12px_28px_rgba(48,31,90,0.06)] sm:px-3.5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eee8ff] text-[#5b2ee5]">
-        {icon === 'clock' ? <ClockIcon className="h-5 w-5" /> : <UsersIcon className="h-5 w-5" />}
+    <div className="inline-flex h-14 min-w-0 items-center gap-2 rounded-full border border-[#ebe7f6] bg-white/95 px-2.5 text-left shadow-[0_12px_28px_rgba(48,31,90,0.06)] sm:gap-2.5 sm:px-3.5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eee8ff] text-[#5b2ee5] sm:h-10 sm:w-10">
+        {icon === 'clock' ? <ClockIcon className="h-[18px] w-[18px] sm:h-5 sm:w-5" /> : <UsersIcon className="h-[18px] w-[18px] sm:h-5 sm:w-5" />}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[0.82rem] font-bold leading-4 text-[#070711] sm:text-sm">{title}</span>
+        <span className="block truncate text-[0.74rem] font-bold leading-4 text-[#070711] min-[380px]:text-[0.78rem] sm:text-sm">{title}</span>
         <span className="hidden text-xs font-medium leading-4 text-[#625b74] xl:block">
           {description}
         </span>
