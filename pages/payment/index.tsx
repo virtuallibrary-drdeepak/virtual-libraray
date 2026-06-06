@@ -2838,15 +2838,19 @@ export default function PaymentPage() {
 
   function renderPlanSelection() {
     const displayPlans = activePlans.length ? activePlans : plans
+    const compactPlans = isMobileCheckout
 
     return (
-      <section className="space-y-5">
-        <div className="rounded-3xl border border-purple-100 bg-white p-5 shadow-[0_18px_48px_rgba(107,33,168,0.08)] sm:p-6">
+      <section className={compactPlans ? 'space-y-3' : 'space-y-5'}>
+        <div className={cn(
+          'border border-purple-100 bg-white shadow-[0_18px_48px_rgba(107,33,168,0.08)]',
+          compactPlans ? 'rounded-[20px] p-4' : 'rounded-3xl p-5 sm:p-6'
+        )}>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-end">
             <SectionHeading
               eyebrow="Plans"
-              title="Choose your Virtual Library access"
-              description="Select a duration now. You can apply a coupon on the next step before opening Razorpay."
+              title={compactPlans ? 'Choose your plan' : 'Choose your Virtual Library access'}
+              description={compactPlans ? undefined : 'Select a duration now. You can apply a coupon on the next step before opening Razorpay.'}
             />
 
             {sessionUser && <SessionCustomerCard user={sessionUser} />}
@@ -2864,9 +2868,10 @@ export default function PaymentPage() {
         )}
 
         {displayPlans.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className={cn('grid', compactPlans ? 'gap-3' : 'gap-4 md:grid-cols-2 xl:grid-cols-3')}>
             {displayPlans.map((plan, index) => (
               <PricingPlanCard
+                compact={compactPlans}
                 key={plan.planId}
                 meta={getPricingPlanMeta(plan, displayPlans)}
                 onSelect={handleSelectPublicPlan}
@@ -3875,7 +3880,7 @@ function SectionHeading({
   eyebrow,
   title,
 }: {
-  description: string
+  description?: string
   eyebrow: string
   title: string
 }) {
@@ -3883,7 +3888,7 @@ function SectionHeading({
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#6b21a8]">{eyebrow}</p>
       <h2 className="mt-2 text-[1.45rem] font-semibold tracking-[-0.02em] text-slate-950">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+      {description && <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>}
     </div>
   )
 }
