@@ -1309,7 +1309,7 @@ export default function PaymentPage() {
       return '/billing/quote'
     }
 
-    return sessionUser ? '/billing/payment-links/quote' : '/billing/plans/quote'
+    return sessionUser ? '/billing/guest/payment-links/quote' : '/billing/plans/quote'
   }
 
   async function revalidatePaymentLinkCoupon(
@@ -1318,7 +1318,7 @@ export default function PaymentPage() {
     customerPayload: PaymentLinkCustomerPayload
   ) {
     const quote = await apiFetch<BillingQuoteResponse>(
-      sessionUser ? '/billing/payment-links/quote' : '/billing/guest/payment-links/quote',
+      '/billing/guest/payment-links/quote',
       {
         method: 'POST',
         skipAuth: !sessionUser,
@@ -1457,19 +1457,16 @@ export default function PaymentPage() {
       }
 
       setStatusNote('Creating your Razorpay payment link...')
-      const created = await apiFetch<PaymentLinkCreateResponse>(
-        sessionUser ? '/billing/payment-links' : '/billing/guest/payment-links',
-        {
-          method: 'POST',
-          skipAuth: !sessionUser,
-          body: JSON.stringify({
-            planId: selectedPlan.planId,
-            courseId: selectedCourse?.courseId,
-            ...(!sessionUser ? customerPayload : {}),
-            couponCode: couponCodeForSubmit,
-          }),
-        }
-      )
+      const created = await apiFetch<PaymentLinkCreateResponse>('/billing/guest/payment-links', {
+        method: 'POST',
+        skipAuth: !sessionUser,
+        body: JSON.stringify({
+          planId: selectedPlan.planId,
+          courseId: selectedCourse?.courseId,
+          ...(!sessionUser ? customerPayload : {}),
+          couponCode: couponCodeForSubmit,
+        }),
+      })
       const paymentUrl = getPaymentLinkUrl(created)
 
       if (!paymentUrl) {
@@ -1478,7 +1475,7 @@ export default function PaymentPage() {
         return
       }
 
-      if (!created.order?.id || (!sessionUser && !created.checkout?.claimToken)) {
+      if (!created.order?.id || !created.checkout?.claimToken) {
         setPageError('Checkout session is incomplete. Please retry payment from pricing.')
         setCheckoutLoading(false)
         return
@@ -1486,7 +1483,7 @@ export default function PaymentPage() {
 
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
-        window.sessionStorage.setItem(CHECKOUT_CLAIM_TOKEN_KEY, created.checkout?.claimToken || '')
+        window.sessionStorage.setItem(CHECKOUT_CLAIM_TOKEN_KEY, created.checkout.claimToken)
         window.sessionStorage.setItem(CHECKOUT_PHONE_KEY, sessionUser?.phoneE164 || customerPayload.phoneE164 || '')
         window.sessionStorage.setItem(CHECKOUT_EMAIL_KEY, sessionUser?.email || customerPayload.email || '')
         window.sessionStorage.setItem(
