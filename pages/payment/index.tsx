@@ -456,7 +456,12 @@ export default function PaymentPage() {
 
       setSessionUser(user)
       if (user) {
-        setAuthMode(tokenStore.getAccessToken() ? 'bearer' : 'cookie')
+        const hasBearerToken = Boolean(tokenStore.getAccessToken())
+
+        setAuthMode(hasBearerToken ? 'bearer' : 'cookie')
+        if (!hasBearerToken) {
+          markMobileCheckoutContext()
+        }
         if (user.name) {
           setTrialName((current) => current || user.name || '')
         }
@@ -474,12 +479,17 @@ export default function PaymentPage() {
     const mobileCheckout = hydratedTokens || isMobileCheckoutRequest(router.query)
 
     if (mobileCheckout) {
-      rememberMobileCheckoutContext()
+      markMobileCheckoutContext()
+    } else {
+      setIsMobileCheckout(false)
     }
 
-    setIsMobileCheckout(mobileCheckout)
-
     return mobileCheckout
+  }
+
+  function markMobileCheckoutContext() {
+    rememberMobileCheckoutContext()
+    setIsMobileCheckout(true)
   }
 
   function hydrateMobileTokensFromQuery() {
@@ -625,7 +635,9 @@ export default function PaymentPage() {
       })
 
       if (!availablePlans.length) {
-        if (data.trialOffer && isMobileCheckoutRequest(router.query)) {
+        const hasCookieBackedSession = Boolean(user && !tokenStore.getAccessToken())
+
+        if (data.trialOffer && (hasCookieBackedSession || isMobileCheckoutRequest(router.query))) {
           const nextCourse = data.trialOffer.course || data.course || null
 
           setPlans([])
