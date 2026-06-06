@@ -89,6 +89,12 @@ type PaymentLinkCustomerPayload = {
   phoneE164?: string
 }
 
+type PrivacyPolicyVersionsResponse = {
+  latest?: {
+    version?: string
+  } | null
+}
+
 const EMPTY_BILLING_DETAILS: BillingDetails = {
   email: '',
 }
@@ -148,7 +154,7 @@ const MOBILE_CONTEXT_QUERY_KEYS = [
   'platform',
   'source',
 ]
-const DEFAULT_PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || '2026-06-04'
+const DEFAULT_PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || ''
 const DEFAULT_PUBLIC_COURSE_SLUG = 'neet-pg'
 const DEFAULT_PUBLIC_COURSE_KEY = 'neetpg'
 
@@ -218,7 +224,7 @@ export default function PaymentPage() {
   const [trialAction, setTrialAction] = useState<TrialAction | null>(null)
   const [trialError, setTrialError] = useState('')
   const [trialMessage, setTrialMessage] = useState('')
-  const [privacyPolicyVersion] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
+  const [privacyPolicyVersion, setPrivacyPolicyVersion] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
 
   const planIdFromQuery = getQueryParam(router.query.planId)
   const courseIdFromQuery = getQueryParam(router.query.courseId)
@@ -357,6 +363,14 @@ export default function PaymentPage() {
   useEffect(() => {
     selectedPlanIdRef.current = selectedPlanId
   }, [selectedPlanId])
+
+  useEffect(() => {
+    if (!router.isReady || DEFAULT_PRIVACY_POLICY_VERSION) {
+      return
+    }
+
+    void loadPrivacyPolicyVersion()
+  }, [router.isReady])
 
   useEffect(() => {
     setCouponCode('')
@@ -605,6 +619,24 @@ export default function PaymentPage() {
 
     setCourseOptions(sortCourseOptions(options.courses || []))
     setCustomCourseOption(options.customCourseOption || null)
+  }
+
+  async function loadPrivacyPolicyVersion() {
+    try {
+      const response = await apiFetch<PrivacyPolicyVersionsResponse>('/legal/privacy-policy/versions', {
+        skipAuth: true,
+        headers: {
+          Accept: 'application/json',
+        },
+      })
+      const version = response.latest?.version?.trim()
+
+      if (version) {
+        setPrivacyPolicyVersion(version)
+      }
+    } catch {
+      setPrivacyPolicyVersion('')
+    }
   }
 
   async function loadPublicPlansForSelection() {
@@ -1177,7 +1209,7 @@ export default function PaymentPage() {
           ...contactPayload,
           gender: trialGender,
           code,
-          privacyPolicyVersion,
+          privacyPolicyVersion: privacyPolicyVersion || undefined,
         }),
       })
       const accessToken = extractAccessToken(completed)
