@@ -4,6 +4,8 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   apiFetch,
+  AvailableBillingCoupon,
+  AvailableBillingCouponsResponse,
   BillingOrderResponse,
   BillingPlan,
   BillingPlansResponse,
@@ -26,6 +28,9 @@ import {
   PublicBillingPlansResponse,
   requestOtp,
   tokenStore,
+  TrialOffer,
+  TrialQuoteResponse,
+  TrialVerifyResponse,
   verifyOtp,
 } from '@/lib/payment-client'
 import {
@@ -38,6 +43,7 @@ type ScreenState =
   | 'planSelect'
   | 'otp'
   | 'course'
+  | 'trial'
   | 'ready'
   | 'processing'
   | 'pending'
@@ -48,6 +54,8 @@ type ScreenState =
 type AuthMode = 'unknown' | 'cookie' | 'bearer' | 'unauthenticated'
 type AccountSetupStep = 'profile' | 'course'
 type AccountGender = 'FEMALE' | 'MALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | ''
+type TrialOtpChannel = 'sms' | 'whatsapp'
+type TrialAction = 'quote' | 'send' | 'verify'
 
 type ResultState = {
   title: string
@@ -83,6 +91,12 @@ type PaymentLinkCustomerPayload = {
   phoneE164?: string
 }
 
+type PrivacyPolicyVersionsResponse = {
+  latest?: {
+    version?: string
+  } | null
+}
+
 const EMPTY_BILLING_DETAILS: BillingDetails = {
   email: '',
 }
@@ -94,8 +108,57 @@ const CHECKOUT_EMAIL_KEY = 'checkoutEmail'
 const CHECKOUT_ACCOUNT_EXISTS_KEY = 'checkoutAccountExists'
 const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
-const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
-const APP_STORE_HREF = 'https://apps.apple.com/'
+const MOBILE_CHECKOUT_CONTEXT_KEY = 'vl_mobile_checkout_context'
+const MOBILE_CHECKOUT_CONTEXT_TTL_MS = 30 * 60 * 1000
+const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
+const APP_STORE_HREF = 'https://apps.apple.com/in/app/virtual-library/id6761748966'
+const PAYMENT_PLAN_FEATURES = [
+  '24/7 Live Study Rooms',
+  'Focus Mode - Block distracting apps',
+  'Spaced Repetition Revision Tracker',
+  'Weekly Live Mentorship Sessions',
+  'Mental Health & Yoga Sessions',
+  'Leaderboard & Study Streaks',
+  'Mobile app access (Android & iOS)',
+]
+const MOBILE_SOURCE_VALUES = new Set([
+  'android',
+  'app',
+  'expo',
+  'ios',
+  'mobile',
+  'mobile-app',
+  'native',
+  'react-native',
+  'rn',
+])
+const MOBILE_ACCESS_TOKEN_QUERY_KEYS = [
+  'accessToken',
+  'access_token',
+  'appAccessToken',
+  'authToken',
+  'mobileAccessToken',
+  'token',
+  'vlAccessToken',
+]
+const MOBILE_REFRESH_TOKEN_QUERY_KEYS = [
+  'refresh',
+  'refreshToken',
+  'refresh_token',
+  'appRefreshToken',
+  'mobileRefreshToken',
+  'vlRefreshToken',
+]
+const MOBILE_CONTEXT_QUERY_KEYS = [
+  'app',
+  'client',
+  'from',
+  'platform',
+  'source',
+]
+const DEFAULT_PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || ''
+const DEFAULT_PUBLIC_COURSE_SLUG = 'neet-pg'
+const DEFAULT_PUBLIC_COURSE_KEY = 'neetpg'
 
 export default function PaymentPage() {
   const router = useRouter()
@@ -106,6 +169,8 @@ export default function PaymentPage() {
   const [authMode, setAuthMode] = useState<AuthMode>('unknown')
   const [screen, setScreen] = useState<ScreenState>('booting')
   const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [trialOffer, setTrialOffer] = useState<TrialOffer | null>(null)
+  const [isMobileCheckout, setIsMobileCheckout] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [pageError, setPageError] = useState('')
   const [authError, setAuthError] = useState('')
@@ -121,6 +186,8 @@ export default function PaymentPage() {
   const [couponLoading, setCouponLoading] = useState(false)
   const [couponMessage, setCouponMessage] = useState('')
   const [couponError, setCouponError] = useState('')
+  const [availableCoupons, setAvailableCoupons] = useState<AvailableBillingCoupon[]>([])
+  const [availableCouponsLoading, setAvailableCouponsLoading] = useState(false)
   const [razorpayReady, setRazorpayReady] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [result, setResult] = useState<ResultState | null>(null)
@@ -151,14 +218,27 @@ export default function PaymentPage() {
   const [accountGender, setAccountGender] = useState<AccountGender>('')
   const [accountTermsAccepted, setAccountTermsAccepted] = useState(false)
   const [accountError, setAccountError] = useState('')
-  const [privacyPolicyVersion] = useState('')
+  const [trialName, setTrialName] = useState('')
+  const [trialGender, setTrialGender] = useState<AccountGender>('')
+  const [trialTermsAccepted, setTrialTermsAccepted] = useState(false)
+  const [trialOtp, setTrialOtp] = useState('')
+  const [trialOtpStarted, setTrialOtpStarted] = useState(false)
+  const [trialOtpChannel, setTrialOtpChannel] = useState<TrialOtpChannel>('sms')
+  const [trialLoading, setTrialLoading] = useState(false)
+  const [trialAction, setTrialAction] = useState<TrialAction | null>(null)
+  const [trialError, setTrialError] = useState('')
+  const [trialMessage, setTrialMessage] = useState('')
+  const [privacyPolicyVersion, setPrivacyPolicyVersion] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
 
   const planIdFromQuery = getQueryParam(router.query.planId)
+  const courseIdFromQuery = getQueryParam(router.query.courseId)
+  const courseSlugFromQuery = getQueryParam(router.query.courseSlug)
+  const durationMonthsFromQuery = getQueryNumber(router.query.durationMonths)
   const paymentStatusFromQuery = getQueryParam(router.query.paymentStatus)
   const checkoutSource = getQueryParam(router.query.source)
   const checkoutMode = getQueryParam(router.query.mode)
   const isLegacyCheckoutFlow = checkoutMode === 'legacy'
-  const isPrimaryPaymentLinksFlow = !isLegacyCheckoutFlow && Boolean(planIdFromQuery || paymentStatusFromQuery)
+  const isPrimaryPaymentLinksFlow = !isLegacyCheckoutFlow && Boolean(planIdFromQuery || durationMonthsFromQuery || paymentStatusFromQuery)
   const shouldUseV2WebFallback = checkoutSource === 'v2-neet-pg'
   const shouldLoadCheckoutScript = router.isReady && isLegacyCheckoutFlow
   const isSessionPaymentLinkCheckout = isPrimaryPaymentLinksFlow && Boolean(sessionUser)
@@ -167,6 +247,9 @@ export default function PaymentPage() {
     () => plans.find((plan) => plan.planId === selectedPlanId) || null,
     [plans, selectedPlanId]
   )
+  const shouldShowTrialOffer = isMobileCheckout && !isLegacyCheckoutFlow && Boolean(trialOffer)
+  const trialCourseTitle = getCheckoutCourseTitle(trialOffer?.course?.title || selectedCourse?.title || selectedPlan?.course?.title)
+  const isTrialSuccess = result?.title.toLowerCase().includes('trial') || false
   const checkoutPricing = useMemo(
     () => getCheckoutPricing(selectedPlan, couponQuote),
     [couponQuote, selectedPlan]
@@ -198,12 +281,31 @@ export default function PaymentPage() {
       })
   }, [plans])
 
-  const activeCourseId = selectedCourse?.courseId || groupedPlans[0]?.course.courseId || ''
+  const activeCourseId = selectedCourse?.courseId || selectedPlan?.course.courseId || groupedPlans[0]?.course.courseId || ''
   const activeGroup = useMemo(() => {
     return groupedPlans.find((group) => group.course.courseId === activeCourseId) || groupedPlans[0] || null
   }, [activeCourseId, groupedPlans])
 
   const activePlans = activeGroup?.plans || []
+  const checkoutCourseOptions = useMemo(() => {
+    const options = new Map<string, CourseSummary>()
+
+    courseOptions.forEach((course) => {
+      options.set(course.courseId, course)
+    })
+
+    groupedPlans.forEach((group) => {
+      options.set(group.course.courseId, group.course)
+    })
+
+    if (selectedCourse?.courseId) {
+      options.set(selectedCourse.courseId, selectedCourse)
+    }
+
+    return Array.from(options.values()).sort((left, right) => {
+      return (left.displayOrder || 0) - (right.displayOrder || 0)
+    })
+  }, [courseOptions, groupedPlans, selectedCourse])
 
   const basePlan = useMemo(() => {
     return [...activePlans].sort((left, right) => {
@@ -267,13 +369,35 @@ export default function PaymentPage() {
   }, [selectedPlanId])
 
   useEffect(() => {
+    if (!router.isReady || DEFAULT_PRIVACY_POLICY_VERSION) {
+      return
+    }
+
+    void loadPrivacyPolicyVersion()
+  }, [router.isReady])
+
+  useEffect(() => {
     setCouponCode('')
     setAppliedCouponCode('')
     setCouponQuote(null)
     setCouponMessage('')
     setCouponError('')
     setPaymentPhoneOtpRequired(false)
+    setTrialOtp('')
+    setTrialOtpStarted(false)
+    setTrialError('')
+    setTrialMessage('')
   }, [selectedPlanId])
+
+  useEffect(() => {
+    if (!selectedPlanId) {
+      setAvailableCoupons([])
+      setAvailableCouponsLoading(false)
+      return
+    }
+
+    void loadAvailableCoupons(selectedPlanId)
+  }, [authMode, selectedPlanId, sessionUser?.phoneE164])
 
   useEffect(() => {
     return () => {
@@ -360,7 +484,15 @@ export default function PaymentPage() {
 
       setSessionUser(user)
       if (user) {
-        setAuthMode(tokenStore.getAccessToken() ? 'bearer' : 'cookie')
+        const hasBearerToken = Boolean(tokenStore.getAccessToken())
+
+        setAuthMode(hasBearerToken ? 'bearer' : 'cookie')
+        if (!hasBearerToken) {
+          markMobileCheckoutContext()
+        }
+        if (user.name) {
+          setTrialName((current) => current || user.name || '')
+        }
       }
 
       return user
@@ -370,7 +502,71 @@ export default function PaymentPage() {
     }
   }
 
+  function syncMobileCheckoutContext() {
+    const hydratedTokens = hydrateMobileTokensFromQuery()
+    const mobileCheckout = hydratedTokens || isMobileCheckoutRequest(router.query)
+
+    if (mobileCheckout) {
+      markMobileCheckoutContext()
+    } else {
+      setIsMobileCheckout(false)
+    }
+
+    return mobileCheckout
+  }
+
+  function markMobileCheckoutContext() {
+    rememberMobileCheckoutContext()
+    setIsMobileCheckout(true)
+  }
+
+  function hydrateMobileTokensFromQuery() {
+    const accessToken = getFirstQueryValue(router.query, MOBILE_ACCESS_TOKEN_QUERY_KEYS)
+    const refreshToken = getFirstQueryValue(router.query, MOBILE_REFRESH_TOKEN_QUERY_KEYS)
+
+    if (!accessToken && !refreshToken) {
+      return false
+    }
+
+    if (accessToken) {
+      tokenStore.setAccessToken(accessToken)
+    }
+
+    if (refreshToken) {
+      tokenStore.setRefreshToken(refreshToken)
+    }
+
+    stripMobileTokenQueryParams()
+    postMobileEvent('MOBILE_TOKEN_RECEIVED')
+
+    return true
+  }
+
+  function stripMobileTokenQueryParams() {
+    const sanitizedQuery = { ...router.query }
+    let changed = false
+
+    for (const key of [...MOBILE_ACCESS_TOKEN_QUERY_KEYS, ...MOBILE_REFRESH_TOKEN_QUERY_KEYS]) {
+      if (sanitizedQuery[key] !== undefined) {
+        delete sanitizedQuery[key]
+        changed = true
+      }
+    }
+
+    if (changed) {
+      void router.replace(
+        {
+          pathname: router.pathname,
+          query: sanitizedQuery,
+        },
+        undefined,
+        { shallow: true, scroll: false }
+      )
+    }
+  }
+
   async function bootstrap() {
+    syncMobileCheckoutContext()
     setPageError('')
     setAuthError('')
     setCourseError('')
@@ -388,7 +584,7 @@ export default function PaymentPage() {
       return
     }
 
-    if (planIdFromQuery) {
+    if (planIdFromQuery || durationMonthsFromQuery) {
       await loadPublicPlanForPayment(planIdFromQuery)
       return
     }
@@ -417,10 +613,50 @@ export default function PaymentPage() {
     await loadPublicPlansForSelection()
   }
 
+  async function fetchCheckoutCourseOptions() {
+    try {
+      return await apiFetch<CourseOptionsResponse>('/courses/options', {
+        skipAuth: true,
+        headers: {
+          Accept: 'application/json',
+        },
+      })
+    } catch {
+      return null
+    }
+  }
+
+  function applyCheckoutCourseOptions(options: CourseOptionsResponse | null) {
+    if (!options) {
+      return
+    }
+
+    setCourseOptions(sortCourseOptions(options.courses || []))
+    setCustomCourseOption(options.customCourseOption || null)
+  }
+
+  async function loadPrivacyPolicyVersion() {
+    try {
+      const response = await apiFetch<PrivacyPolicyVersionsResponse>('/legal/privacy-policy/versions', {
+        skipAuth: true,
+        headers: {
+          Accept: 'application/json',
+        },
+      })
+      const version = response.latest?.version?.trim()
+
+      if (version) {
+        setPrivacyPolicyVersion(version)
+      }
+    } catch {
+      setPrivacyPolicyVersion('')
+    }
+  }
+
   async function loadPublicPlansForSelection() {
     try {
       setScreen('booting')
-      const [data, user] = await Promise.all([
+      const [data, user, checkoutCourses] = await Promise.all([
         apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
           skipAuth: true,
           headers: {
@@ -428,7 +664,10 @@ export default function PaymentPage() {
           },
         }),
         loadSessionUser(),
+        fetchCheckoutCourseOptions(),
       ])
+      applyCheckoutCourseOptions(checkoutCourses)
+      setTrialOffer(data.trialOffer || null)
       const availablePlans = [...(data.plans || [])].sort((left, right) => {
         if ((left.course.displayOrder || 0) !== (right.course.displayOrder || 0)) {
           return (left.course.displayOrder || 0) - (right.course.displayOrder || 0)
@@ -442,6 +681,21 @@ export default function PaymentPage() {
       })
 
       if (!availablePlans.length) {
+        const hasCookieBackedSession = Boolean(user && !tokenStore.getAccessToken())
+
+        if (data.trialOffer && (hasCookieBackedSession || isMobileCheckoutRequest(router.query))) {
+          const nextCourse = data.trialOffer.course || data.course || null
+
+          setPlans([])
+          setSelectedPlanId('')
+          setSelectedCourse(nextCourse)
+          setSelectedCourseChoice(nextCourse?.courseId || '')
+          setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
+          setScreen('planSelect')
+          setStatusNote('Choose the 24-hour trial to continue.')
+          return
+        }
+
         setPlans([])
         setSelectedPlanId('')
         setSelectedCourse(data.course || null)
@@ -450,9 +704,14 @@ export default function PaymentPage() {
         return
       }
 
+      const nextPlanId = getDefaultPlanId(availablePlans, undefined, durationMonthsFromQuery)
+      const nextPlan = availablePlans.find((plan) => plan.planId === nextPlanId)
+      const nextCourse = nextPlan?.course || data.course || availablePlans[0]?.course || null
+
       setPlans(availablePlans)
-      setSelectedCourse(data.course || availablePlans[0]?.course || null)
-      setSelectedPlanId(getDefaultPlanId(availablePlans))
+      setSelectedCourse(nextCourse)
+      setSelectedCourseChoice(nextCourse?.courseId || '')
+      setSelectedPlanId(nextPlanId)
       setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
       setScreen('planSelect')
       setStatusNote('Choose a plan to continue to payment.')
@@ -462,10 +721,10 @@ export default function PaymentPage() {
     }
   }
 
-  async function loadPublicPlanForPayment(requestedPlanId: string) {
+  async function loadPublicPlanForPayment(requestedPlanId?: string) {
     try {
       setScreen('booting')
-      const [data, user] = await Promise.all([
+      const [data, user, checkoutCourses] = await Promise.all([
         apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
           skipAuth: true,
           headers: {
@@ -473,7 +732,10 @@ export default function PaymentPage() {
           },
         }),
         loadSessionUser(),
+        fetchCheckoutCourseOptions(),
       ])
+      applyCheckoutCourseOptions(checkoutCourses)
+      setTrialOffer(data.trialOffer || null)
       const availablePlans = [...(data.plans || [])].sort((left, right) => {
         if (left.durationMonths !== right.durationMonths) {
           return left.durationMonths - right.durationMonths
@@ -481,19 +743,30 @@ export default function PaymentPage() {
 
         return left.amountPaise - right.amountPaise
       })
-      const matchingPlan = availablePlans.find((plan) => plan.planId === requestedPlanId)
+      const matchingPlan = getRequestedPublicCheckoutPlan(availablePlans, {
+        requestedCourseId: courseIdFromQuery,
+        requestedCourseSlug: courseSlugFromQuery,
+        requestedDurationMonths: durationMonthsFromQuery,
+        requestedPlanId,
+      })
+      const requestedCourse = getRequestedCourseFromOptions(checkoutCourses?.courses || [], courseIdFromQuery, courseSlugFromQuery)
 
       if (!availablePlans.length || !matchingPlan) {
         setPlans(availablePlans)
         setSelectedPlanId('')
-        setSelectedCourse(data.course || availablePlans[0]?.course || null)
+        setSelectedCourse(requestedCourse || data.course || availablePlans[0]?.course || null)
         setScreen('error')
         setPageError('Selected plan is no longer available. Please return to pricing and choose again.')
         return
       }
 
+      const nextCourse = shouldUseV2WebFallback
+        ? null
+        : requestedCourse || matchingPlan.course || data.course || availablePlans[0]?.course || null
+
       setPlans(availablePlans)
-      setSelectedCourse(data.course || matchingPlan.course)
+      setSelectedCourse(nextCourse)
+      setSelectedCourseChoice(nextCourse?.courseId || '')
       setSelectedPlanId(matchingPlan.planId)
       setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
       setScreen('ready')
@@ -564,9 +837,7 @@ export default function PaymentPage() {
       })
 
       const preferredCourseId = getQueryParam(router.query.courseId)
-      const normalizedCourses = [...(options.courses || [])].sort(
-        (left, right) => (left.displayOrder || 0) - (right.displayOrder || 0)
-      )
+      const normalizedCourses = sortCourseOptions(options.courses || [])
       const hasPreferredCourse = preferredCourseId
         ? normalizedCourses.some((course) => course.courseId === preferredCourseId)
         : false
@@ -741,8 +1012,32 @@ export default function PaymentPage() {
     }
   }
 
-  async function handleApplyCoupon() {
-    const nextCouponCode = normalizeCouponInput(couponCode)
+  async function loadAvailableCoupons(planId: string) {
+    setAvailableCouponsLoading(true)
+
+    try {
+      const response = await apiFetch<AvailableBillingCouponsResponse>(
+        `/billing/coupons/available?planId=${encodeURIComponent(planId)}`
+      )
+
+      if (selectedPlanIdRef.current !== planId) {
+        return
+      }
+
+      setAvailableCoupons(Array.isArray(response.coupons) ? response.coupons : [])
+    } catch {
+      if (selectedPlanIdRef.current === planId) {
+        setAvailableCoupons([])
+      }
+    } finally {
+      if (selectedPlanIdRef.current === planId) {
+        setAvailableCouponsLoading(false)
+      }
+    }
+  }
+
+  async function handleApplyCoupon(couponCodeOverride?: string) {
+    const nextCouponCode = normalizeCouponInput(couponCodeOverride || couponCode)
 
     if (!selectedPlan) {
       setCouponError('Select a plan before applying a coupon.')
@@ -754,16 +1049,9 @@ export default function PaymentPage() {
       return
     }
 
-    const customerPayload = isPrimaryPaymentLinksFlow ? getPaymentLinkCustomerPayload() : null
-
-    if (isPrimaryPaymentLinksFlow && !customerPayload) {
-      return
-    }
-
     if (!isPrimaryPaymentLinksFlow && !ensureAuthorization('Sign in with your phone number to apply a coupon.')) {
       return
     }
-
     setCouponLoading(true)
     setCouponError('')
     setCouponMessage('')
@@ -771,13 +1059,12 @@ export default function PaymentPage() {
 
     try {
       const requestPlanId = selectedPlan.planId
-      const quoteEndpoint = isPrimaryPaymentLinksFlow ? '/billing/guest/payment-links/quote' : '/billing/quote'
+      const quoteEndpoint = getCouponPreviewEndpoint()
       const quote = await apiFetch<BillingQuoteResponse>(quoteEndpoint, {
         method: 'POST',
-        skipAuth: isPrimaryPaymentLinksFlow && !sessionUser,
+        skipAuth: quoteEndpoint === '/billing/plans/quote',
         body: JSON.stringify({
           planId: requestPlanId,
-          ...(customerPayload || {}),
           couponCode: nextCouponCode,
         }),
       })
@@ -799,8 +1086,13 @@ export default function PaymentPage() {
       setAppliedCouponCode('')
       setCouponError(quote.message || 'Coupon is not valid for this plan.')
     } catch (error) {
-      if (!isPrimaryPaymentLinksFlow && error instanceof PaymentApiError && error.status === 401) {
+      if (
+        error instanceof PaymentApiError &&
+        error.status === 401 &&
+        (!isPrimaryPaymentLinksFlow || sessionUser)
+      ) {
         tokenStore.clear()
+        setSessionUser(null)
         openOtpScreen('Sign in again to apply a coupon.')
         return
       }
@@ -813,6 +1105,19 @@ export default function PaymentPage() {
     }
   }
 
+  async function handleSelectAvailableCoupon(coupon: AvailableBillingCoupon) {
+    const nextCouponCode = normalizeCouponInput(coupon.code)
+
+    if (!nextCouponCode || activeCouponCode === nextCouponCode) {
+      return
+    }
+
+    setCouponCode(nextCouponCode)
+    setCouponError('')
+    setCouponMessage('')
+    await handleApplyCoupon(nextCouponCode)
+  }
+
   function handleRemoveCoupon() {
     setCouponCode('')
     setAppliedCouponCode('')
@@ -821,9 +1126,327 @@ export default function PaymentPage() {
     setCouponError('')
   }
 
+  function handleSelectTrialOffer() {
+    if (!shouldShowTrialOffer || !trialOffer) {
+      return
+    }
+
+    if (trialOffer.course?.courseId) {
+      setSelectedCourse(trialOffer.course)
+      setSelectedCourseChoice(trialOffer.course.courseId)
+    }
+
+    if (sessionUser?.name) {
+      setTrialName((current) => current || sessionUser.name || '')
+    }
+
+    setScreen('trial')
+    setTrialOtp('')
+    setTrialOtpStarted(false)
+    setTrialError('')
+    setTrialMessage('No payment will be collected. Your trial starts only after OTP verification.')
+    setPageError('')
+    setBillingError('')
+    postMobileEvent('TRIAL_SELECTED', {
+      code: trialOffer.code,
+      durationHours: trialOffer.durationHours,
+      courseId: trialOffer.course?.courseId,
+    })
+  }
+
+  function returnToPaidCheckout() {
+    setTrialOtp('')
+    setTrialOtpStarted(false)
+    setTrialError('')
+    setTrialMessage('')
+
+    if (selectedPlan) {
+      setScreen('ready')
+      return
+    }
+
+    setScreen('planSelect')
+  }
+
+  function handleTrialFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (trialOtpStarted) {
+      void handleVerifyTrialOtp()
+      return
+    }
+
+    void handleStartTrialOtp()
+  }
+
+  async function handleStartTrialOtp() {
+    const contactPayload = getTrialContactPayload()
+
+    if (!contactPayload) {
+      return
+    }
+
+    setTrialLoading(true)
+    setTrialAction('quote')
+    setTrialError('')
+    setTrialMessage('')
+
+    try {
+      const quote = await apiFetch<TrialQuoteResponse>('/billing/guest/trial/quote', {
+        method: 'POST',
+        body: JSON.stringify(contactPayload),
+      })
+
+      if (quote.eligibility?.eligible === false || isTrialFallbackCode(quote.eligibility?.code || quote.code)) {
+        setTrialError(getTrialEligibilityMessage(quote))
+        setTrialMessage('Paid checkout remains available.')
+        setTrialOtpStarted(false)
+        return
+      }
+
+      setTrialAction('send')
+
+      await apiFetch('/billing/guest/trial/otp/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...contactPayload,
+          channel: trialOtpChannel,
+        }),
+      })
+
+      setTrialOtpStarted(true)
+      setTrialMessage(`OTP sent by ${trialOtpChannel === 'whatsapp' ? 'WhatsApp' : 'SMS'}. Enter it to activate the 24-hour trial.`)
+      postMobileEvent('TRIAL_OTP_SENT', {
+        code: trialOffer?.code,
+        channel: trialOtpChannel,
+      })
+    } catch (error) {
+      if (isTrialPaidFallbackError(error)) {
+        setTrialError(getTrialPaidFallbackMessage(error))
+        setTrialMessage('Paid checkout remains available.')
+        setTrialOtpStarted(false)
+        return
+      }
+
+      setTrialError(getErrorMessage(error, 'Could not start the trial OTP. Please try again.'))
+    } finally {
+      setTrialLoading(false)
+      setTrialAction(null)
+    }
+  }
+
+  async function handleVerifyTrialOtp() {
+    const contactPayload = getTrialContactPayload()
+    const code = trialOtp.trim()
+
+    if (!contactPayload) {
+      return
+    }
+
+    if (code.length < 4) {
+      setTrialError('Enter the OTP sent to your mobile number.')
+      return
+    }
+
+    setTrialLoading(true)
+    setTrialAction('verify')
+    setTrialError('')
+    setTrialMessage('')
+
+    try {
+      const completed = await apiFetch<TrialVerifyResponse>('/billing/guest/trial/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...contactPayload,
+          gender: trialGender,
+          code,
+          privacyPolicyVersion: privacyPolicyVersion || undefined,
+        }),
+      })
+      const accessToken = extractAccessToken(completed)
+      const refreshToken = extractRefreshToken(completed)
+
+      if (!accessToken) {
+        throw new Error('Trial activated, but the backend did not return an access token.')
+      }
+
+      tokenStore.setAccessToken(accessToken)
+
+      if (refreshToken) {
+        tokenStore.setRefreshToken(refreshToken)
+      }
+
+      const me = await apiFetch<any>('/me')
+      await apiFetch('/me/courses')
+
+      const nextSessionUser = extractSessionUser(me)
+      setSessionUser(nextSessionUser)
+      setAuthMode('bearer')
+
+      const returnUrl = completed.returnUrl || getQueryParam(router.query.returnUrl)
+
+      setTrialOtp('')
+      setTrialOtpStarted(false)
+      setTrialMessage('')
+      setCheckoutLoading(false)
+      setScreen('success')
+      setShowSuccessModal(Boolean(returnUrl))
+      setResult({
+        title: '24-hour trial active',
+        message: `Your ${trialCourseTitle} trial is active for ${trialOffer?.durationHours || 24} hours.`,
+        tone: 'success',
+        returnUrl,
+      })
+      setStatusNote('Trial activated successfully.')
+      postMobileEvent('AUTH_SUCCESS', {
+        accessToken,
+        refreshToken,
+      })
+      postMobileEvent('TRIAL_SUCCESS', {
+        status: 'success',
+        accessToken,
+        refreshToken,
+        trialCode: trialOffer?.code,
+        durationHours: trialOffer?.durationHours,
+        courseId: trialOffer?.course?.courseId,
+        returnUrl,
+      })
+      postMobileEvent('PAYMENT_SUCCESS', {
+        status: 'success',
+        accessType: 'trial',
+        trialCode: trialOffer?.code,
+        durationHours: trialOffer?.durationHours,
+        courseId: trialOffer?.course?.courseId,
+        returnUrl,
+      })
+    } catch (error) {
+      if (isTrialPaidFallbackError(error)) {
+        setTrialError(getTrialPaidFallbackMessage(error))
+        setTrialMessage('Paid checkout remains available.')
+        return
+      }
+
+      setTrialError(getErrorMessage(error, 'Could not verify the trial OTP. Please try again.'))
+    } finally {
+      setTrialLoading(false)
+      setTrialAction(null)
+    }
+  }
+
+  function getTrialContactPayload() {
+    const name = trialName.trim() || sessionUser?.name?.trim() || ''
+
+    if (!name) {
+      setTrialError('Enter your name to continue.')
+      return null
+    }
+
+    if (!trialGender) {
+      setTrialError('Choose your gender.')
+      return null
+    }
+
+    if (!trialTermsAccepted) {
+      setTrialError('Accept the terms and privacy policy to continue.')
+      return null
+    }
+
+    const payload: {
+      planId?: string
+      phoneE164?: string
+      email?: string
+      name: string
+    } = {
+      name,
+    }
+    const trialPlanId = selectedPlan?.planId
+
+    if (trialPlanId) {
+      payload.planId = trialPlanId
+    }
+
+    if (!sessionUser) {
+      const validationError = validateBillingDetails(billingDetails, phone)
+
+      if (validationError) {
+        setTrialError(validationError)
+        return null
+      }
+
+      try {
+        const normalizedPhone = normalizeIndianPhone(phone)
+
+        payload.phoneE164 = normalizedPhone.e164
+        payload.email = billingDetails.email.trim().toLowerCase()
+      } catch (error) {
+        setTrialError(getErrorMessage(error, 'Enter a valid mobile number.'))
+        return null
+      }
+    }
+
+    return payload
+  }
+
+  function getCouponPreviewEndpoint() {
+    if (!isPrimaryPaymentLinksFlow) {
+      return '/billing/quote'
+    }
+
+    return sessionUser ? '/billing/guest/payment-links/quote' : '/billing/plans/quote'
+  }
+
+  async function revalidatePaymentLinkCoupon(
+    requestPlanId: string,
+    validatedCouponCode: string,
+    customerPayload: PaymentLinkCustomerPayload
+  ) {
+    const quote = await apiFetch<BillingQuoteResponse>(
+      '/billing/guest/payment-links/quote',
+      {
+        method: 'POST',
+        skipAuth: !sessionUser,
+        body: JSON.stringify({
+          planId: requestPlanId,
+          ...(!sessionUser ? customerPayload : {}),
+          couponCode: validatedCouponCode,
+        }),
+      }
+    )
+
+    if (selectedPlanIdRef.current !== requestPlanId) {
+      return false
+    }
+
+    setCouponQuote(quote)
+
+    if (quote.couponStatus === 'APPLIED' && quote.isValidCoupon) {
+      const appliedCode = quote.coupon?.code || validatedCouponCode
+      setAppliedCouponCode(appliedCode)
+      setCouponCode(appliedCode)
+      setCouponMessage(quote.message || 'Coupon applied.')
+      setCouponError('')
+      return true
+    }
+
+    setAppliedCouponCode('')
+    setCouponError(quote.message || 'Coupon is not valid for this customer.')
+    setStatusNote('Coupon validation failed.')
+    return false
+  }
+
   async function handlePayNow() {
     if (!selectedPlan) {
       setPageError('Select a plan before continuing.')
+      return
+    }
+
+    if (checkoutCourseOptions.length && !selectedCourse?.courseId) {
+      setBillingError('Select your course to continue.')
+      return
+    }
+
+    if (couponCode.trim() && !activeCouponCode) {
+      setCouponError('Apply the coupon before continuing, or clear it.')
       return
     }
 
@@ -859,7 +1482,8 @@ export default function PaymentPage() {
         method: 'POST',
         body: JSON.stringify({
           planId: selectedPlan.planId,
-          couponCode: getCouponCodeForSubmit(couponCode),
+          courseId: selectedCourse?.courseId,
+          couponCode: getCouponCodeForSubmit(activeCouponCode),
         }),
       })
 
@@ -899,13 +1523,31 @@ export default function PaymentPage() {
     setStatusNote('Creating your Razorpay payment link...')
 
     try {
+      const couponCodeForSubmit = getCouponCodeForSubmit(activeCouponCode)
+
+      if (couponCodeForSubmit) {
+        setStatusNote('Validating coupon for checkout...')
+        const isCouponStillValid = await revalidatePaymentLinkCoupon(
+          selectedPlan.planId,
+          couponCodeForSubmit,
+          customerPayload
+        )
+
+        if (!isCouponStillValid) {
+          setCheckoutLoading(false)
+          return
+        }
+      }
+
+      setStatusNote('Creating your Razorpay payment link...')
       const created = await apiFetch<PaymentLinkCreateResponse>('/billing/guest/payment-links', {
         method: 'POST',
         skipAuth: !sessionUser,
         body: JSON.stringify({
           planId: selectedPlan.planId,
-          ...customerPayload,
-          couponCode: getCouponCodeForSubmit(couponCode),
+          courseId: selectedCourse?.courseId,
+          ...(!sessionUser ? customerPayload : {}),
+          couponCode: couponCodeForSubmit,
         }),
       })
       const paymentUrl = getPaymentLinkUrl(created)
@@ -942,6 +1584,14 @@ export default function PaymentPage() {
       window.location.assign(paymentUrl)
     } catch (error) {
       const errorCode = getPaymentErrorCode(error)
+
+      if (error instanceof PaymentApiError && error.status === 401 && sessionUser) {
+        tokenStore.clear()
+        setSessionUser(null)
+        openOtpScreen('Sign in again to continue to payment.')
+        setCheckoutLoading(false)
+        return
+      }
 
       if (error instanceof PaymentApiError && error.status === 404) {
         setPageError('Selected plan is no longer available. Please return to pricing and choose again.')
@@ -1010,7 +1660,7 @@ export default function PaymentPage() {
       amount: order.amount || order.razorpay.amountPaise,
       currency: order.currency || order.razorpay.currency,
       name: 'Virtual Library',
-      description: `${order.course.title} • ${order.plan.name}`,
+      description: `${getCheckoutCourseTitle(order.course.title)} • ${order.plan.name}`,
       prefill: {
         name: order.user?.name,
         email: order.user?.email,
@@ -1077,7 +1727,7 @@ export default function PaymentPage() {
         setShowSuccessModal(true)
         setResult({
           title: 'Access unlocked',
-          message: `Payment confirmed for ${order.course.title}. You can continue in the app or stay on this page.`,
+          message: `Payment confirmed for ${getCheckoutCourseTitle(order.course.title)}. You can continue in the app or stay on this page.`,
           tone: 'success',
           returnUrl: verification.returnUrl,
         })
@@ -1279,6 +1929,24 @@ export default function PaymentPage() {
       return
     }
 
+    if (nextPaymentOrderId) {
+      setScreen('pending')
+      setResult({
+        title: 'Checking payment',
+        message: 'Razorpay returned a failure callback, but we are verifying the final payment status before marking it failed.',
+        tone: 'warning',
+      })
+      setStatusNote('Checking payment status...')
+
+      const resolved = await checkPaymentLinkStatus(nextPaymentOrderId, true)
+
+      if (!resolved) {
+        startPaymentLinkStatusPoll(nextPaymentOrderId)
+      }
+
+      return
+    }
+
     setScreen('failed')
     setResult({
       title: 'Payment failed',
@@ -1319,7 +1987,7 @@ export default function PaymentPage() {
   async function checkPaymentLinkStatus(orderId: string, manual: boolean) {
     if (!orderId) {
       setPageError('Payment order id is missing. Please reopen checkout from pricing.')
-      return
+      return false
     }
 
     if (manual) {
@@ -1330,10 +1998,14 @@ export default function PaymentPage() {
     try {
       const storedCheckoutSession = getStoredCheckoutSession()
       const claimToken = getCheckoutClaimToken()
-      if (isPrimaryPaymentLinksFlow && !claimToken) {
+      const isStoredSessionCheckout = storedCheckoutSession.sessionUser
+      const canCheckAuthenticatedStatus =
+        isStoredSessionCheckout || Boolean(tokenStore.getAccessToken()) || authMode === 'cookie'
+
+      if (isPrimaryPaymentLinksFlow && !claimToken && !canCheckAuthenticatedStatus) {
         setScreen('error')
         setPageError('Checkout session could not be verified. Please contact support with your payment id.')
-        return
+        return false
       }
       const status = claimToken
         ? await apiFetch<PaymentLinkStatusResponse>('/billing/guest/payment-links/status', {
@@ -1367,7 +2039,7 @@ export default function PaymentPage() {
         }
 
         await openAccountSetup(orderId)
-        return
+        return true
       }
 
       if (completed) {
@@ -1397,7 +2069,7 @@ export default function PaymentPage() {
           orderId,
           providerPaymentId: status.order?.providerPaymentId,
         })
-        return
+        return true
       }
 
       if (failed) {
@@ -1417,7 +2089,7 @@ export default function PaymentPage() {
           status: 'failed',
           orderId,
         })
-        return
+        return true
       }
 
       if (manual) {
@@ -1427,10 +2099,14 @@ export default function PaymentPage() {
           tone: 'warning',
         })
       }
+
+      return false
     } catch (error) {
       if (manual) {
         setPageError(getErrorMessage(error, 'Unable to check payment status. Please try again.'))
       }
+
+      return false
     }
   }
 
@@ -1706,15 +2382,33 @@ export default function PaymentPage() {
     void router.push('/')
   }
 
+  function getCheckoutCourseTitle(title?: string | null) {
+    if (shouldUseV2WebFallback) {
+      return 'Virtual Library Access'
+    }
+
+    return title || 'Virtual Library'
+  }
+
   function handleSelectCourseGroup(courseId: string) {
+    const nextCourse = checkoutCourseOptions.find((course) => course.courseId === courseId)
     const nextGroup = groupedPlans.find((group) => group.course.courseId === courseId)
 
-    if (!nextGroup) {
+    if (!nextCourse && !nextGroup) {
       return
     }
 
-    setSelectedCourse(nextGroup.course)
-    setSelectedPlanId(getDefaultPlanId(nextGroup.plans))
+    const requestedDurationMonths = selectedPlan?.durationMonths || getQueryNumber(router.query.durationMonths)
+
+    setSelectedCourse(nextCourse || nextGroup?.course || null)
+    setSelectedCourseChoice(courseId)
+
+    if (nextGroup) {
+      setSelectedPlanId(getDefaultPlanId(nextGroup.plans, undefined, requestedDurationMonths))
+    }
+
+    setPageError('')
+    setBillingError('')
   }
 
   async function handleSelectPublicPlan(plan: BillingPlan) {
@@ -1735,6 +2429,7 @@ export default function PaymentPage() {
       screen === 'planSelect' ||
       screen === 'otp' ||
       screen === 'course' ||
+      screen === 'trial' ||
       screen === 'accountSetup' ||
       screen === 'error' ||
       screen === 'success'
@@ -1815,7 +2510,7 @@ export default function PaymentPage() {
       return result?.returnUrl ? 'Return to app' : 'Payment pending'
     }
 
-    return checkoutLoading ? 'Opening Razorpay...' : 'Start Learning'
+    return checkoutLoading ? 'Opening Razorpay...' : 'Pay & Start Learning'
   }
 
   function isPrimaryActionDisabled() {
@@ -1980,17 +2675,233 @@ export default function PaymentPage() {
     )
   }
 
-  function renderPlanSelection() {
-    const displayPlans = activePlans.length ? activePlans : plans
+  function renderTrialForm() {
+    const disabled = trialLoading
+    const showContactFields = !sessionUser
+    const primaryDisabled =
+      disabled ||
+      !trialOffer ||
+      (!showContactFields ? false : phone.trim().length < 10 || !billingDetails.email.trim()) ||
+      !(trialName.trim() || sessionUser?.name?.trim()) ||
+      !trialGender ||
+      !trialTermsAccepted ||
+      (trialOtpStarted && trialOtp.trim().length < 4)
+    const primaryLabel = trialOtpStarted
+      ? trialLoading && trialAction === 'verify'
+        ? 'Verifying OTP...'
+        : 'Verify OTP and activate trial'
+      : trialLoading && trialAction === 'quote'
+        ? 'Checking eligibility...'
+        : trialLoading && trialAction === 'send'
+          ? 'Sending OTP...'
+          : 'Send OTP for trial'
 
     return (
-      <section className="space-y-5">
-        <div className="rounded-3xl border border-purple-100 bg-white p-5 shadow-[0_18px_48px_rgba(107,33,168,0.08)] sm:p-6">
+      <div className="space-y-3">
+        <TrialOfferCard
+          compact
+          courseTitle={trialCourseTitle}
+          offer={trialOffer}
+        />
+
+        <form onSubmit={handleTrialFormSubmit} className="space-y-2.5 text-[#211536]">
+          <section className="rounded-[22px] border border-[#c8f4df] bg-white p-3.5 shadow-[0_18px_42px_rgba(12,121,85,0.10)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#0f8f64]">
+                Trial activation
+              </p>
+              <p className="rounded-full bg-[#ecfdf5] px-2.5 py-1 text-[11px] font-black text-[#047857]">
+                No Razorpay
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              {showContactFields ? (
+                <>
+                  <InputField
+                    label="Mobile number"
+                    hint="+91"
+                    placeholder="10-digit number"
+                    value={phone}
+                    onChange={(value) => {
+                      setPhone(value.replace(/\D/g, '').slice(0, 10))
+                      setTrialError('')
+                      setBillingError('')
+                    }}
+                    inputMode="numeric"
+                    disabled={disabled || trialOtpStarted}
+                  />
+                  <InputField
+                    label="Email address"
+                    placeholder="you@email.com"
+                    value={billingDetails.email}
+                    onChange={(value) => {
+                      updateBillingField('email', value)
+                      setTrialError('')
+                    }}
+                    inputMode="email"
+                    disabled={disabled || trialOtpStarted}
+                  />
+                </>
+              ) : (
+                <SessionCustomerCard user={sessionUser} />
+              )}
+
+              <InputField
+                label="Full name"
+                value={trialName}
+                onChange={(value) => {
+                  setTrialName(value)
+                  setTrialError('')
+                }}
+                disabled={disabled}
+              />
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">Gender</span>
+                <div className="relative">
+                  <select
+                    value={trialGender}
+                    onChange={(event) => {
+                      setTrialGender(event.target.value as AccountGender)
+                      setTrialError('')
+                    }}
+                    disabled={disabled}
+                    className="h-10 w-full appearance-none rounded-[14px] border border-[#e8e2ee] bg-white px-3 pr-9 text-sm font-semibold text-[#211536] outline-none transition focus:border-[#0f8f64] disabled:cursor-not-allowed disabled:bg-[#fbf9fd] disabled:text-[#9a90ae]"
+                  >
+                    <option value="">Select</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="MALE">Male</option>
+                    <option value="NON_BINARY">Non-binary</option>
+                    <option value="OTHER">Other</option>
+                    <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                  </select>
+                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a90ae]" />
+                </div>
+              </label>
+
+              {!trialOtpStarted && (
+                <div>
+                  <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">OTP channel</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['sms', 'whatsapp'] as TrialOtpChannel[]).map((channel) => {
+                      const active = trialOtpChannel === channel
+
+                      return (
+                        <button
+                          key={channel}
+                          type="button"
+                          onClick={() => setTrialOtpChannel(channel)}
+                          disabled={disabled}
+                          className={cn(
+                            'h-10 rounded-[14px] border px-3 text-sm font-black capitalize transition disabled:cursor-not-allowed disabled:opacity-60',
+                            active
+                              ? 'border-[#0f8f64] bg-[#ecfdf5] text-[#047857]'
+                              : 'border-[#e8e2ee] bg-white text-[#675f73] hover:border-[#91dfbd]'
+                          )}
+                        >
+                          {channel}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {trialOtpStarted && (
+                <InputField
+                  label="OTP"
+                  placeholder="Enter OTP"
+                  value={trialOtp}
+                  onChange={(value) => {
+                    setTrialOtp(value.replace(/\D/g, '').slice(0, 6))
+                    setTrialError('')
+                  }}
+                  inputMode="numeric"
+                  disabled={disabled}
+                />
+              )}
+            </div>
+
+            <label className="mt-3 flex items-start gap-3 rounded-[14px] border border-[#e8f7ef] bg-[#f8fffb] px-3 py-2.5 text-xs leading-5 text-[#486155]">
+              <input
+                type="checkbox"
+                checked={trialTermsAccepted}
+                onChange={(event) => {
+                  setTrialTermsAccepted(event.target.checked)
+                  setTrialError('')
+                }}
+                disabled={disabled}
+                className="mt-0.5 h-4 w-4 rounded border-[#a7e7c8] text-[#0f8f64] focus:ring-[#0f8f64]"
+              />
+              <span>
+                I accept the{' '}
+                <a href="/terms-and-conditions" className="font-bold text-[#047857] hover:underline">
+                  Terms
+                </a>{' '}
+                and{' '}
+                <a href="/privacy-policy" className="font-bold text-[#047857] hover:underline">
+                  Privacy Policy
+                </a>
+                .
+              </span>
+            </label>
+          </section>
+
+          <div className="space-y-2.5">
+            {trialError && <MessageBanner tone="danger">{trialError}</MessageBanner>}
+            {trialMessage && <MessageBanner tone={trialOtpStarted ? 'success' : 'warning'}>{trialMessage}</MessageBanner>}
+          </div>
+
+          <div className="space-y-2.5">
+            <button
+              type="submit"
+              disabled={primaryDisabled}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[#0f8f64] px-5 py-3 text-sm font-black text-white shadow-[0_18px_34px_rgba(15,143,100,0.24)] transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {primaryLabel}
+            </button>
+
+            {trialOtpStarted && (
+              <button
+                type="button"
+                onClick={() => void handleStartTrialOtp()}
+                disabled={disabled}
+                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] border border-[#a7e7c8] bg-white px-5 py-3 text-sm font-black text-[#047857] transition hover:border-[#0f8f64] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {trialLoading && trialAction === 'send' ? 'Resending...' : 'Resend OTP'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={returnToPaidCheckout}
+              disabled={disabled && trialAction === 'verify'}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] border border-[#eadff8] bg-white px-5 py-3 text-sm font-black text-[#6b21a8] transition hover:border-[#9b63ef] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              View paid plans instead
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  function renderPlanSelection() {
+    const displayPlans = activePlans.length ? activePlans : plans
+    const compactPlans = isMobileCheckout
+
+    return (
+      <section className={compactPlans ? 'space-y-3' : 'space-y-5'}>
+        <div className={cn(
+          'border border-purple-100 bg-white shadow-[0_18px_48px_rgba(107,33,168,0.08)]',
+          compactPlans ? 'rounded-[20px] p-4' : 'rounded-3xl p-5 sm:p-6'
+        )}>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-end">
             <SectionHeading
               eyebrow="Plans"
-              title="Choose your NEET-PG access"
-              description="Select a plan now. You can apply a coupon on the next step before opening Razorpay."
+              title={compactPlans ? 'Choose your plan' : 'Choose your Virtual Library access'}
+              description={compactPlans ? undefined : 'Select a duration now. You can apply a coupon on the next step before opening Razorpay.'}
             />
 
             {sessionUser && <SessionCustomerCard user={sessionUser} />}
@@ -1999,17 +2910,30 @@ export default function PaymentPage() {
 
         {pageError && <MessageBanner tone="danger">{pageError}</MessageBanner>}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {displayPlans.map((plan, index) => (
-            <PricingPlanCard
-              key={plan.planId}
-              meta={getPricingPlanMeta(plan, displayPlans)}
-              onSelect={handleSelectPublicPlan}
-              plan={plan}
-              tilt={index % 2 === 0 ? 'left' : 'right'}
-            />
-          ))}
-        </div>
+        {shouldShowTrialOffer && (
+          <TrialOfferCard
+            courseTitle={trialCourseTitle}
+            offer={trialOffer}
+            onSelect={handleSelectTrialOffer}
+          />
+        )}
+
+        {displayPlans.length > 0 ? (
+          <div className={cn('grid', compactPlans ? 'gap-3' : 'gap-4 md:grid-cols-2 xl:grid-cols-3')}>
+            {displayPlans.map((plan, index) => (
+              <PricingPlanCard
+                compact={compactPlans}
+                key={plan.planId}
+                meta={getPricingPlanMeta(plan, displayPlans)}
+                onSelect={handleSelectPublicPlan}
+                plan={plan}
+                tilt={index % 2 === 0 ? 'left' : 'right'}
+              />
+            ))}
+          </div>
+        ) : (
+          <MessageBanner tone="warning">Paid plans are not available right now.</MessageBanner>
+        )}
       </section>
     )
   }
@@ -2017,33 +2941,45 @@ export default function PaymentPage() {
   function renderCheckoutForm() {
     const disabled = checkoutLoading || screen === 'processing' || screen === 'pending'
     const showContactFields = !isSessionPaymentLinkCheckout
+    const selectedCourseId = selectedCourse?.courseId || selectedCoursePreview?.courseId || ''
 
     return (
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="space-y-3">
+        {shouldShowTrialOffer && (screen === 'ready' || screen === 'failed') && (
+          <TrialOfferCard
+            compact
+            courseTitle={trialCourseTitle}
+            offer={trialOffer}
+            onSelect={handleSelectTrialOffer}
+          />
+        )}
+
         <form
           onSubmit={handleCheckoutFormSubmit}
-          className="rounded-3xl border border-purple-100 bg-white p-4 text-slate-950 shadow-[0_18px_48px_rgba(107,33,168,0.10)] sm:p-5"
+          className="space-y-2.5 text-[#211536]"
         >
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b21a8]">
-                Checkout
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
+          <section className="rounded-[22px] border border-[#f1eafc] bg-white p-3.5 shadow-[0_18px_42px_rgba(61,45,99,0.09)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#a49ab7]">
                 {showContactFields ? 'Contact details' : 'Payment details'}
-              </h1>
+              </p>
+              <p className="text-xs font-semibold text-[#7c3ff0]">Razorpay</p>
             </div>
-            <p className="rounded-full bg-purple-50 px-3 py-1.5 text-xs font-semibold text-[#6b21a8]">
-              Razorpay
-            </p>
-          </div>
 
-          {showContactFields ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2">
+            <div className="grid gap-2">
+              <CourseSelectorField
+                courses={checkoutCourseOptions}
+                disabled={disabled}
+                label="Select your course"
+                onChange={handleSelectCourseGroup}
+                value={selectedCourseId}
+              />
+
+              {showContactFields ? (
                 <InputField
                   label="Mobile number"
                   hint="+91"
+                  placeholder="10-digit number"
                   value={phone}
                   onChange={(value) => {
                     setPhone(value.replace(/\D/g, '').slice(0, 10))
@@ -2053,41 +2989,37 @@ export default function PaymentPage() {
                   inputMode="numeric"
                   disabled={otpLoading || disabled}
                 />
-              </div>
-
-              {((screen === 'otp' && otpRequested) || paymentPhoneOtpRequired) && (
-                <div className="sm:col-span-2">
-                  <InputField
-                    label="OTP"
-                    value={otp}
-                    onChange={(value) => {
-                      setOtp(value.replace(/\D/g, '').slice(0, 6))
-                      setAuthError('')
-                    }}
-                    inputMode="numeric"
-                    disabled={otpLoading || checkoutLoading}
-                  />
-                </div>
+              ) : (
+                <SessionCustomerCard user={sessionUser} />
               )}
 
-              <div className="sm:col-span-2">
+              {((screen === 'otp' && otpRequested) || paymentPhoneOtpRequired) && (
                 <InputField
-                  label="Email"
+                  label="OTP"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(value) => {
+                    setOtp(value.replace(/\D/g, '').slice(0, 6))
+                    setAuthError('')
+                  }}
+                  inputMode="numeric"
+                  disabled={otpLoading || checkoutLoading}
+                />
+              )}
+
+              {showContactFields && (
+                <InputField
+                  label="Email address"
+                  placeholder="you@email.com"
                   value={billingDetails.email}
                   onChange={(value) => updateBillingField('email', value)}
                   inputMode="email"
                   disabled={disabled}
                 />
-              </div>
+              )}
             </div>
-          ) : (
-            <div className="mt-5">
-              <SessionCustomerCard user={sessionUser} />
-            </div>
-          )}
 
-          {checkoutPricing && selectedPlan && (
-            <div className="mt-6">
+            {checkoutPricing && selectedPlan && (
               <CouponSection
                 appliedCode={activeCouponCode}
                 couponCode={couponCode}
@@ -2095,6 +3027,8 @@ export default function PaymentPage() {
                 error={couponError}
                 loading={couponLoading}
                 message={couponMessage}
+                availableCoupons={availableCoupons}
+                availableCouponsLoading={availableCouponsLoading}
                 onApply={handleApplyCoupon}
                 onChange={(value) => {
                   setCouponCode(normalizeCouponInput(value))
@@ -2106,12 +3040,13 @@ export default function PaymentPage() {
                   }
                 }}
                 onRemove={handleRemoveCoupon}
+                onSelectAvailableCoupon={handleSelectAvailableCoupon}
                 pricing={checkoutPricing}
               />
-            </div>
-          )}
+            )}
+          </section>
 
-          <div className="mt-5 space-y-3">
+          <div className="space-y-2.5">
             {authError && <MessageBanner tone="danger">{authError}</MessageBanner>}
             {billingError && <MessageBanner tone="danger">{billingError}</MessageBanner>}
             {pageError && <MessageBanner tone="danger">{pageError}</MessageBanner>}
@@ -2123,11 +3058,11 @@ export default function PaymentPage() {
             )}
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="space-y-2.5">
             <button
               type="submit"
               disabled={isPrimaryActionDisabled()}
-              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#6b21a8] px-5 py-3 text-sm font-bold text-white shadow-[0_16px_32px_rgba(107,33,168,0.22)] transition hover:bg-[#581c87] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#883bea_0%,#9c55ef_100%)] px-5 py-3 text-sm font-black text-white shadow-[0_18px_34px_rgba(126,57,224,0.30)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {getPrimaryActionLabel()}
             </button>
@@ -2153,6 +3088,20 @@ export default function PaymentPage() {
               </button>
             )}
           </div>
+
+          <PaymentTrustBadges />
+
+          <div className="rounded-[14px] border border-[#ffd797] bg-[#fff7e8] px-4 py-2.5 text-xs leading-5 text-[#9a4a00]">
+            <div className="flex items-start gap-2">
+              <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#f2a223]" />
+              <p>
+                All payments are <span className="font-bold">non-refundable</span>. Please review your plan before proceeding. For queries,{' '}
+                <a href="/contact" className="font-semibold underline decoration-[#c56a10]/40 underline-offset-2">
+                  contact support
+                </a>.
+              </p>
+            </div>
+          </div>
         </form>
 
         {renderPlanSummary()}
@@ -2161,42 +3110,43 @@ export default function PaymentPage() {
   }
 
   function renderPlanSummary() {
-    const planTitle = selectedPlan ? formatPlanTitle(selectedPlan) : 'Selected plan'
-    const durationLabel = selectedPlan ? formatPlanDuration(selectedPlan.durationMonths) : ''
-    const totalLabel = checkoutPricing
-      ? formatCurrency(checkoutPricing.finalAmountPaise, checkoutPricing.currency)
-      : '-'
-    const baseLabel = checkoutPricing
-      ? formatCurrency(checkoutPricing.baseAmountPaise, checkoutPricing.currency)
-      : '-'
+    const durationLabel = selectedPlan ? formatPlanDuration(selectedPlan.durationMonths) : 'Selected Plan'
+    const finalAmountPaise = checkoutPricing?.finalAmountPaise ?? selectedPlan?.amountPaise ?? 0
+    const currency = checkoutPricing?.currency || selectedPlan?.currency || 'INR'
+    const monthlyAmountPaise = selectedPlan
+      ? Math.round(finalAmountPaise / Math.max(selectedPlan.durationMonths, 1))
+      : 0
+    const metrics = selectedPlan ? getPlanMetrics(selectedPlan, basePlan) : null
+    const savingsPercent = selectedPlan ? getSavingsPercent(selectedPlan, metrics, checkoutPricing) : 0
 
     return (
-      <aside className="rounded-3xl border border-[#6b21a8]/15 bg-[#6b21a8] p-5 text-white shadow-[0_18px_48px_rgba(107,33,168,0.18)]">
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#d3b8ff]">
-          Plan summary
-        </p>
-        <h2 className="mt-3 text-3xl font-bold tracking-[-0.04em]">{planTitle}</h2>
-        {durationLabel && <p className="mt-1 text-sm font-medium text-white/70">{durationLabel}</p>}
+      <aside className="relative overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_86%_7%,rgba(188,114,255,0.42)_0,rgba(188,114,255,0.24)_18%,transparent_19%),linear-gradient(145deg,#8c39e8_0%,#6d22d3_54%,#651fd2_100%)] p-4 text-white shadow-[0_28px_46px_rgba(105,35,204,0.30)]">
+        <div className="pointer-events-none absolute -bottom-14 -left-8 h-32 w-32 rounded-full bg-white/7" />
+        <div className="relative">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/48">
+            Plan summary
+          </p>
+          <h2 className="mt-1.5 text-2xl font-black leading-none tracking-[-0.04em]">{durationLabel}</h2>
+          <p className="mt-1.5 text-xs font-semibold text-white/64">Full access · Billed once</p>
 
-        <div className="mt-5 space-y-3 border-y border-white/14 py-5">
-          <PlanFeature>Access to 7000+ PYQs</PlanFeature>
-          <PlanFeature>Complete handwritten notes</PlanFeature>
-          <PlanFeature>Custom test creation</PlanFeature>
-          <PlanFeature>Mobile app access after payment</PlanFeature>
-        </div>
+          <div className="mt-4 space-y-1 border-y border-white/14 py-3">
+            {PAYMENT_PLAN_FEATURES.map((feature) => (
+              <PlanFeature key={feature}>{feature}</PlanFeature>
+            ))}
+          </div>
 
-        <div className="mt-5 space-y-2.5">
-          <SummaryPriceLine label="Subtotal" value={baseLabel} />
-          {checkoutPricing && checkoutPricing.discountAmountPaise > 0 && (
-            <SummaryPriceLine
-              label="Discount"
-              value={`-${formatCurrency(checkoutPricing.discountAmountPaise, checkoutPricing.currency)}`}
-              tone="success"
-            />
-          )}
-          <div className="flex items-center justify-between gap-4 pt-2">
-            <span className="text-sm font-bold text-white">Due today</span>
-            <span className="text-3xl font-bold tracking-[-0.04em] text-white">{totalLabel}</span>
+          <div className="mt-3 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold text-white/42">Per month</p>
+              <p className="mt-1 text-xl font-black leading-none tracking-[-0.04em]">
+                {formatCompactCurrency(monthlyAmountPaise, currency)}/mo
+              </p>
+            </div>
+            {savingsPercent > 0 && (
+              <span className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+                Save {savingsPercent}%
+              </span>
+            )}
           </div>
         </div>
       </aside>
@@ -2204,7 +3154,9 @@ export default function PaymentPage() {
   }
 
   function renderSuccessPage() {
-    const courseTitle = selectedCoursePreview?.title || selectedCourse?.title || activeGroup?.course.title || 'Virtual Library'
+    const courseTitle = getCheckoutCourseTitle(
+      selectedCoursePreview?.title || selectedCourse?.title || activeGroup?.course.title || 'Virtual Library'
+    )
 
     return (
       <section className="mx-auto grid max-w-5xl items-center gap-5 py-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:py-10">
@@ -2213,13 +3165,15 @@ export default function PaymentPage() {
             <CheckIcon className="h-8 w-8" />
           </div>
           <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b21a8]">
-            Access ready
+            {isTrialSuccess ? 'Trial active' : 'Access ready'}
           </p>
           <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] text-slate-950 sm:text-5xl">
-            Your access is ready.
+            {isTrialSuccess ? 'Your 24-hour trial is active.' : 'Your access is ready.'}
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-500">
-            Download the Virtual Library mobile app and sign in with the phone number used for checkout to start learning.
+            {isTrialSuccess
+              ? 'Continue in the Virtual Library mobile app. Your trial access is active now and no payment was collected.'
+              : 'Download the Virtual Library mobile app and sign in with the phone number used for checkout to start learning.'}
           </p>
 
           <div className="mt-7">
@@ -2229,13 +3183,13 @@ export default function PaymentPage() {
 
         <aside className="rounded-3xl bg-[#6b21a8] p-6 text-white shadow-[0_24px_56px_rgba(107,33,168,0.22)]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#d3b8ff]">
-            Subscription
+            {isTrialSuccess ? 'Trial access' : 'Subscription'}
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-[-0.04em]">{courseTitle}</h2>
           <div className="mt-6 space-y-3 border-y border-white/14 py-5">
-            <PlanFeature>Course access is active</PlanFeature>
+            <PlanFeature>{isTrialSuccess ? '24-hour trial access is active' : 'Course access is active'}</PlanFeature>
             <PlanFeature>Mobile app access is enabled</PlanFeature>
-            <PlanFeature>Study rooms, PYQs, notes, and custom tests are ready</PlanFeature>
+            <PlanFeature>Study rooms, focus tools, notes, and progress insights are ready</PlanFeature>
           </div>
           <a
             href="/v2/neet-pg/access"
@@ -2267,6 +3221,10 @@ export default function PaymentPage() {
 
     if (screen === 'accountSetup') {
       return renderAccountSetup()
+    }
+
+    if (screen === 'trial') {
+      return renderTrialForm()
     }
 
     if (screen === 'course') {
@@ -2437,59 +3395,61 @@ export default function PaymentPage() {
         />
       )}
 
-      <div className="min-h-screen bg-[#f8f7fb] px-4 py-4 text-slate-900 sm:px-6">
-        <div className="mx-auto flex min-h-full max-w-5xl flex-col">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleBack}
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-purple-100 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-[#6b21a8]/40"
-            >
-              <ChevronLeftIcon className="h-3.5 w-3.5" />
-              Back
-            </button>
+      <div className="min-h-screen bg-white text-[#211536]">
+        <div className="mx-auto w-full max-w-[430px] px-4 pb-4 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="inline-flex h-7 items-center gap-1.5 rounded-full px-1 text-sm font-medium text-[#6f667d] transition hover:text-[#6b21a8]"
+              >
+                <ChevronLeftIcon className="h-3.5 w-3.5" />
+                Back
+              </button>
 
-            <div className="min-w-0 rounded-full border border-purple-100 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#6b21a8] shadow-sm">
-              <span className="block truncate">
-                {selectedCoursePreview?.title || activeGroup?.course.title || 'Virtual Library'}
-              </span>
+              <div className="min-w-0 rounded-full bg-[#f0e3ff] px-3 py-1 text-[11px] font-black text-[#8441ee]">
+                <span className="block truncate">
+                  {screen === 'trial'
+                    ? '24h Trial'
+                    : selectedPlan ? `${formatPlanDuration(selectedPlan.durationMonths)} Plan` : 'Selected Plan'}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#6b21a8]">
-              Secure checkout
+            <div className="mt-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#08a76b]">
+                Secure checkout
               </p>
-              <h1 className="mt-1 text-3xl font-semibold leading-none tracking-[-0.04em] text-slate-950 sm:text-4xl">
-                Payment
+              <h1 className="mt-1 text-[28px] font-black leading-none tracking-[-0.04em] text-[#171021]">
+                {screen === 'trial' ? 'Trial' : 'Payment'}
               </h1>
             </div>
-          </div>
 
-          <main className="mt-4 min-h-0 flex-1">
-            {renderBodyContent()}
-          </main>
+            <main className="mt-3">
+              {renderBodyContent()}
+            </main>
 
-          {renderFooterAction()}
+            {renderFooterAction()}
 
-          <div className="mt-3 flex flex-wrap justify-center gap-4 pb-1 text-[11px] font-medium text-slate-400">
-            <a href="/terms-and-conditions" className="transition hover:text-[#6b21a8]">
-              Terms
-            </a>
-            <a href="/privacy-policy" className="transition hover:text-[#6b21a8]">
-              Privacy
-            </a>
-            <a href="/refund-policy" className="transition hover:text-[#6b21a8]">
-              Refunds
-            </a>
-          </div>
+            <div className="mt-4 flex flex-wrap justify-center gap-5 pb-1 text-[11px] font-medium text-[#9b93aa]">
+              <a href="/terms-and-conditions" className="transition hover:text-[#6b21a8]">
+                Terms
+              </a>
+              <a href="/privacy-policy" className="transition hover:text-[#6b21a8]">
+                Privacy
+              </a>
+              <a href="/refund-policy" className="transition hover:text-[#6b21a8]">
+                Refunds
+              </a>
+            </div>
         </div>
       </div>
 
       <SuccessCompletionModal
         isOpen={showSuccessModal && screen === 'success' && Boolean(result?.returnUrl)}
         message={result?.message}
+        eyebrowText={isTrialSuccess ? 'Trial Activated' : 'Payment Completed'}
+        titleText={isTrialSuccess ? 'Your trial is active' : 'Your access is ready'}
         helperText={
           result?.returnUrl
             ? 'Close this modal to continue back into the app.'
@@ -2512,6 +3472,8 @@ export default function PaymentPage() {
 
 function CouponSection({
   appliedCode,
+  availableCoupons,
+  availableCouponsLoading,
   couponCode,
   disabled,
   error,
@@ -2520,9 +3482,12 @@ function CouponSection({
   onApply,
   onChange,
   onRemove,
+  onSelectAvailableCoupon,
   pricing,
 }: {
   appliedCode: string
+  availableCoupons: AvailableBillingCoupon[]
+  availableCouponsLoading: boolean
   couponCode: string
   disabled: boolean
   error: string
@@ -2531,46 +3496,111 @@ function CouponSection({
   onApply: () => void
   onChange: (value: string) => void
   onRemove: () => void
+  onSelectAvailableCoupon: (coupon: AvailableBillingCoupon) => void
   pricing: BillingPricing
 }) {
+  const [expanded, setExpanded] = useState(Boolean(couponCode || appliedCode || error || message))
   const hasAppliedCoupon = Boolean(appliedCode)
+  const hasAvailableCoupons = availableCoupons.length > 0
   const canApply = Boolean(couponCode.trim()) && !disabled && !hasAppliedCoupon
+  const applyCoupon = () => {
+    if (canApply && !loading) {
+      onApply()
+    }
+  }
+
+  useEffect(() => {
+    if (couponCode || appliedCode || error || message) {
+      setExpanded(true)
+    }
+  }, [appliedCode, couponCode, error, message])
 
   return (
-    <section className="rounded-2xl border border-purple-100 bg-white px-3 py-3 shadow-[0_10px_24px_rgba(107,33,168,0.05)]">
-      <form
-        className="flex items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-
-          if (canApply) {
-            onApply()
-          }
-        }}
+    <section className="mt-3 border-t border-[#f0edf5] pt-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center gap-2 text-left text-xs font-semibold text-[#681ee6] transition hover:text-[#4f15bd]"
       >
-        <label className="min-w-0 flex-1">
-          <span className="mb-2 block text-sm font-medium text-slate-700">Coupon code</span>
-          <input
-            type="text"
-            value={couponCode}
-            onChange={(event) => onChange(event.target.value)}
-            disabled={disabled || hasAppliedCoupon}
-            className="h-11 w-full rounded-2xl border border-purple-100 bg-[#fbfaff] px-3 text-sm font-semibold uppercase tracking-[0.08em] text-slate-900 outline-none transition focus:border-[#6b21a8] focus:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-            autoComplete="off"
-          />
-        </label>
+        <TagIcon className="h-4 w-4 shrink-0" />
+        <span>Coupon code</span>
+        {hasAvailableCoupons && (
+          <span className="ml-auto rounded-full bg-[#f2eaff] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#681ee6]">
+            {availableCoupons.length} available
+          </span>
+        )}
+        {!hasAvailableCoupons && availableCouponsLoading && (
+          <span className="ml-auto rounded-full bg-[#f7f4fb] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#9b93aa]">
+            Checking
+          </span>
+        )}
+      </button>
 
-        <button
-          type="submit"
-          disabled={!canApply || loading}
-          className="h-11 shrink-0 rounded-2xl bg-[#6b21a8] px-4 text-sm font-semibold text-white shadow-[0_12px_22px_rgba(107,33,168,0.16)] transition hover:bg-[#581c87] disabled:cursor-not-allowed disabled:opacity-55"
-        >
-          {loading ? 'Applying...' : 'Apply'}
-        </button>
-      </form>
+      {!hasAppliedCoupon && hasAvailableCoupons && (
+        <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
+          {availableCoupons.map((coupon) => {
+            const normalizedCode = normalizeCouponInput(coupon.code)
+            const isSelected = normalizedCode === normalizeCouponInput(couponCode)
+
+            return (
+              <button
+                key={coupon.code}
+                type="button"
+                onClick={() => onSelectAvailableCoupon(coupon)}
+                disabled={disabled || loading}
+                className={cn(
+                  'min-w-[128px] rounded-[14px] border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
+                  isSelected
+                    ? 'border-[#7b2fee] bg-[#f6efff] text-[#211536]'
+                    : 'border-[#eee5f8] bg-white text-[#211536] hover:border-[#cdb7f8]'
+                )}
+              >
+                <span className="block truncate text-xs font-black uppercase tracking-[0.08em] text-[#681ee6]">
+                  {coupon.code}
+                </span>
+                <span className="mt-1 block truncate text-xs font-semibold text-[#6f657b]">
+                  {getAvailableCouponBenefit(coupon)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {expanded && (
+        <div className="mt-2.5 flex items-end gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Coupon code</span>
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  applyCoupon()
+                }
+              }}
+              disabled={disabled || hasAppliedCoupon}
+              className="h-10 w-full rounded-[13px] border border-[#e9e2f3] bg-white px-3 text-sm font-bold uppercase tracking-[0.08em] text-[#211536] outline-none transition placeholder:text-[#c9c2d3] focus:border-[#8b3fea] disabled:cursor-not-allowed disabled:opacity-70"
+              placeholder="COUPON"
+              autoComplete="off"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={applyCoupon}
+            disabled={!canApply || loading}
+            className="h-10 shrink-0 rounded-[13px] bg-[#6d22d3] px-4 text-sm font-black text-white shadow-[0_12px_22px_rgba(107,33,168,0.16)] transition hover:bg-[#581cba] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {loading ? 'Applying...' : 'Apply'}
+          </button>
+        </div>
+      )}
 
       {hasAppliedCoupon && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-emerald-900">{appliedCode}</p>
             {message && <p className="mt-0.5 text-xs text-emerald-700">{message}</p>}
@@ -2589,18 +3619,16 @@ function CouponSection({
       {!hasAppliedCoupon && error && <p className="mt-3 text-xs font-medium text-rose-600">{error}</p>}
       {!hasAppliedCoupon && !error && message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}
 
-      <div className="mt-4 space-y-1.5 border-t border-purple-50 pt-3">
+      <div className="mt-3 space-y-1.5 border-t border-[#f0edf5] pt-3">
         <PriceLine label="Subtotal" value={formatCurrency(pricing.baseAmountPaise, pricing.currency)} />
-        {pricing.discountAmountPaise > 0 && (
-          <PriceLine
-            label="Discount"
-            value={`-${formatCurrency(pricing.discountAmountPaise, pricing.currency)}`}
-            tone="success"
-          />
-        )}
-        <div className="flex items-center justify-between pt-2">
-          <span className="text-sm font-semibold text-slate-950">Total</span>
-          <span className="text-xl font-bold tracking-[-0.03em] text-slate-950">
+        <PriceLine
+          label="Discount"
+          value={`- ${formatCurrency(pricing.discountAmountPaise, pricing.currency)}`}
+          tone="success"
+        />
+        <div className="mt-3 flex items-center justify-between border-t border-[#ece7f1] pt-3">
+          <span className="text-sm font-black text-[#211536]">Total due today</span>
+          <span className="text-xl font-black tracking-[-0.04em] text-[#7b2fee]">
             {formatCurrency(pricing.finalAmountPaise, pricing.currency)}
           </span>
         </div>
@@ -2619,10 +3647,69 @@ function PriceLine({
   value: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className={cn('font-semibold text-slate-700', tone === 'success' && 'text-emerald-700')}>
+    <div className="flex items-center justify-between gap-3 text-xs">
+      <span className="text-[#7d758b]">{label}</span>
+      <span className={cn('font-semibold text-[#51465f]', tone === 'success' && 'text-emerald-600')}>
         {value}
+      </span>
+    </div>
+  )
+}
+
+function CourseSelectorField({
+  courses,
+  disabled,
+  label,
+  onChange,
+  value,
+}: {
+  courses: CourseSummary[]
+  disabled?: boolean
+  label: string
+  onChange: (courseId: string) => void
+  value: string
+}) {
+  const hasOptions = courses.length > 0
+
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled || !hasOptions}
+          className="h-10 w-full appearance-none truncate rounded-[14px] border border-[#e8e2ee] bg-white px-3 pr-9 text-sm font-semibold text-[#211536] outline-none transition focus:border-[#8b3fea] disabled:cursor-not-allowed disabled:bg-[#fbf9fd] disabled:text-[#9a90ae]"
+        >
+          <option value="" disabled>
+            {hasOptions ? 'Select your course' : 'Course unavailable'}
+          </option>
+          {courses.map((course) => (
+            <option key={course.courseId} value={course.courseId}>
+              {course.title || 'Virtual Library Access'}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a90ae]" />
+      </div>
+    </label>
+  )
+}
+
+function PaymentTrustBadges() {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-1 py-1 text-[11px] font-medium text-[#9a90ae]">
+      <span className="inline-flex items-center gap-1.5">
+        <LockIcon className="h-3.5 w-3.5 text-[#8b3fea]" />
+        Secure payment
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <BoltIcon className="h-3.5 w-3.5 text-[#8b3fea]" />
+        Instant access
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <PhoneIcon className="h-3.5 w-3.5 text-[#8b3fea]" />
+        Android & iOS
       </span>
     </div>
   )
@@ -2649,11 +3736,11 @@ function SummaryPriceLine({
 
 function PlanFeature({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#d3b8ff] text-[#d3b8ff]">
-        <CheckIcon className="h-3 w-3" />
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/18 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+        <CheckIcon className="h-2.5 w-2.5" />
       </span>
-      <p className="text-sm leading-5 text-white/82">{children}</p>
+      <p className="text-[11px] leading-4 text-white/84">{children}</p>
     </div>
   )
 }
@@ -2700,13 +3787,87 @@ function SessionCustomerCard({ user }: { user: PaymentSessionUser | null }) {
   const emailLabel = user?.email ? maskEmail(user.email) : ''
 
   return (
-    <div className="rounded-2xl border border-purple-100 bg-[#fbf9ff] px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b21a8]">
+    <div className="rounded-[14px] border border-[#e8e2ee] bg-white px-3 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#7b2fee]">
         Signed in
       </p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{phoneLabel}</p>
-      {emailLabel && <p className="mt-0.5 text-xs font-medium text-slate-500">{emailLabel}</p>}
+      <p className="mt-1 text-sm font-semibold text-[#211536]">{phoneLabel}</p>
+      {emailLabel && <p className="mt-0.5 text-xs font-medium text-[#7d758b]">{emailLabel}</p>}
     </div>
+  )
+}
+
+function TrialOfferCard({
+  compact = false,
+  courseTitle,
+  offer,
+  onSelect,
+}: {
+  compact?: boolean
+  courseTitle: string
+  offer: TrialOffer | null
+  onSelect?: () => void
+}) {
+  if (!offer) {
+    return null
+  }
+
+  const durationLabel = formatTrialDuration(offer.durationHours)
+
+  return (
+    <section
+      className={cn(
+        'relative overflow-hidden rounded-[22px] border border-[#a7e7c8] bg-[linear-gradient(135deg,#f7fffb_0%,#ecfdf5_54%,#fffaf0_100%)] shadow-[0_18px_42px_rgba(12,121,85,0.12)]',
+        compact ? 'p-3.5' : 'p-5'
+      )}
+    >
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#0f8f64]">
+              Mobile trial
+            </p>
+            <h2 className={cn(
+              'mt-1 font-black leading-tight tracking-[-0.04em] text-[#10261d]',
+              compact ? 'text-xl' : 'text-3xl'
+            )}>
+              {durationLabel} free trial
+            </h2>
+            <p className={cn('mt-2 font-medium leading-5 text-[#476457]', compact ? 'text-xs' : 'text-sm')}>
+              {courseTitle} access after OTP verification.
+            </p>
+          </div>
+
+          <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-black text-[#047857] shadow-[0_8px_18px_rgba(12,121,85,0.10)]">
+            {formatCurrency(offer.amountPaise, offer.currency)}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TrialBadge>No Razorpay</TrialBadge>
+          <TrialBadge>OTP required</TrialBadge>
+          <TrialBadge>First time only</TrialBadge>
+        </div>
+
+        {onSelect && (
+          <button
+            type="button"
+            onClick={onSelect}
+            className="mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[14px] bg-[#0f8f64] px-5 py-3 text-sm font-black text-white shadow-[0_16px_30px_rgba(15,143,100,0.22)] transition hover:bg-[#047857]"
+          >
+            Start {durationLabel} trial
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TrialBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-[#c8f4df] bg-white/78 px-2.5 py-1 text-[11px] font-black text-[#047857]">
+      {children}
+    </span>
   )
 }
 
@@ -2820,7 +3981,7 @@ function SectionHeading({
   eyebrow,
   title,
 }: {
-  description: string
+  description?: string
   eyebrow: string
   title: string
 }) {
@@ -2828,7 +3989,7 @@ function SectionHeading({
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#6b21a8]">{eyebrow}</p>
       <h2 className="mt-2 text-[1.45rem] font-semibold tracking-[-0.02em] text-slate-950">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+      {description && <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>}
     </div>
   )
 }
@@ -2852,9 +4013,9 @@ function InputField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
-      <div className="flex items-center rounded-2xl border border-purple-100 bg-white px-3 shadow-[0_8px_18px_rgba(107,33,168,0.05)] focus-within:border-[#6b21a8]">
-        {hint && <span className="mr-3 text-sm font-semibold text-slate-400">{hint}</span>}
+      <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">{label}</span>
+      <div className="flex h-10 items-center rounded-[14px] border border-[#e8e2ee] bg-white px-3 transition focus-within:border-[#8b3fea] disabled:opacity-70">
+        {hint && <span className="mr-3 border-r border-[#eee8f4] pr-3 text-sm font-semibold text-[#9c94a9]">{hint}</span>}
         <input
           type="text"
           inputMode={inputMode}
@@ -2862,7 +4023,7 @@ function InputField({
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder || undefined}
           disabled={disabled}
-          className="w-full border-0 bg-transparent px-0 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0"
+          className="w-full min-w-0 border-0 bg-transparent px-0 py-2 text-sm font-medium text-[#211536] outline-none placeholder:text-[#c9c2d3] focus:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
         />
       </div>
     </label>
@@ -2879,7 +4040,7 @@ function MessageBanner({
   return (
     <div
       className={cn(
-        'rounded-2xl border px-4 py-3 text-sm',
+        'rounded-[14px] border px-4 py-3 text-sm',
         tone === 'danger' && 'border-rose-200 bg-rose-50 text-rose-700',
         tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
         tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-700'
@@ -2911,6 +4072,14 @@ function ChevronLeftIcon({ className }: { className?: string }) {
   )
 }
 
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M5.5 7.5L10 12l4.5-4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
 function ArrowRightIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -2924,6 +4093,51 @@ function CheckIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
       <path d="M5 10.5l3.2 3.2L15 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M4.5 5.5v4.1c0 .35.14.68.39.92l5.1 5.1a1.55 1.55 0 002.2 0l3.43-3.43a1.55 1.55 0 000-2.2l-5.1-5.1a1.3 1.3 0 00-.92-.39H5.5a1 1 0 00-1 1z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M7.5 7.5h.01" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+    </svg>
+  )
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M6 8V6.5a4 4 0 018 0V8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M5.5 8h9A1.5 1.5 0 0116 9.5v5A1.5 1.5 0 0114.5 16h-9A1.5 1.5 0 014 14.5v-5A1.5 1.5 0 015.5 8z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function BoltIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M10.8 2.9L5.7 10h4l-.5 7.1 5.1-8.2h-4l.5-6z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M7 3.5h6A1.5 1.5 0 0114.5 5v10A1.5 1.5 0 0113 16.5H7A1.5 1.5 0 015.5 15V5A1.5 1.5 0 017 3.5z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M9 14h2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M10 3.2l5 1.9v3.7c0 3.15-1.88 5.98-5 7.48-3.12-1.5-5-4.33-5-7.48V5.1l5-1.9z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M10 7.2v3.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+      <path d="M10 13.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
     </svg>
   )
 }
@@ -2949,16 +4163,20 @@ function AppleIcon({ className }: { className?: string }) {
 }
 
 function SuccessCompletionModal({
+  eyebrowText,
   isOpen,
   message,
   helperText,
   buttonLabel,
+  titleText,
   onClose,
 }: {
+  eyebrowText?: string
   isOpen: boolean
   message?: string
   helperText: string
   buttonLabel: string
+  titleText?: string
   onClose: () => void
 }) {
   useEffect(() => {
@@ -2986,10 +4204,10 @@ function SuccessCompletionModal({
         </div>
 
         <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#6b21a8]">
-          Payment Completed
+          {eyebrowText || 'Payment Completed'}
         </p>
         <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">
-          Your access is ready
+          {titleText || 'Your access is ready'}
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-500">
           {message || 'Payment confirmed successfully.'}
@@ -3027,6 +4245,30 @@ function getCheckoutPricing(plan: BillingPlan | null, quote: BillingQuoteRespons
   }
 }
 
+function getAvailableCouponBenefit(coupon: AvailableBillingCoupon) {
+  const pricing = coupon.pricing
+
+  if (pricing?.discountAmountPaise && pricing.discountAmountPaise > 0) {
+    return `Save ${formatCurrency(pricing.discountAmountPaise, pricing.currency)}`
+  }
+
+  const discountType = coupon.discountType?.toUpperCase()
+
+  if (discountType === 'PERCENT' || discountType === 'PERCENTAGE') {
+    return `${coupon.discountValue || 0}% off`
+  }
+
+  if (coupon.discountValue && coupon.discountValue > 0) {
+    const amountPaise = discountType === 'FLAT' || discountType === 'AMOUNT'
+      ? coupon.discountValue
+      : coupon.discountValue * 100
+
+    return `${formatCurrency(amountPaise, pricing?.currency || 'INR')} off`
+  }
+
+  return coupon.name || 'Apply coupon'
+}
+
 function normalizeCouponInput(value: string) {
   return value.replace(/\s/g, '').toUpperCase().slice(0, 64)
 }
@@ -3055,6 +4297,23 @@ function getPlanMetrics(plan: BillingPlan, basePlan: BillingPlan | null): PlanMe
   }
 }
 
+function getSavingsPercent(
+  plan: BillingPlan,
+  metrics: PlanMetrics | null,
+  pricing: BillingPricing | null
+) {
+  const compareAmountPaise = pricing && pricing.discountAmountPaise > 0
+    ? pricing.baseAmountPaise
+    : metrics?.compareAmountPaise
+  const finalAmountPaise = pricing?.finalAmountPaise ?? plan.amountPaise
+
+  if (!compareAmountPaise || compareAmountPaise <= finalAmountPaise) {
+    return 0
+  }
+
+  return Math.max(1, Math.round(((compareAmountPaise - finalAmountPaise) / compareAmountPaise) * 100))
+}
+
 function getExplicitCompareAmount(plan: BillingPlan) {
   const rawPlan = plan as BillingPlan & {
     compareAmountPaise?: number | null
@@ -3065,12 +4324,112 @@ function getExplicitCompareAmount(plan: BillingPlan) {
   return rawPlan.compareAmountPaise || rawPlan.originalAmountPaise || rawPlan.mrpAmountPaise || null
 }
 
+function formatCompactCurrency(amountPaise: number, currency: string) {
+  return formatCurrency(amountPaise, currency).replace(/\.00$/, '')
+}
+
 function getPlanTag(plan: BillingPlan, popularPlanId: string) {
   if (plan.planId === popularPlanId) {
     return 'Recommended'
   }
 
   return null
+}
+
+function getRequestedPublicCheckoutPlan(
+  plans: BillingPlan[],
+  query: {
+    requestedCourseId?: string
+    requestedCourseSlug?: string
+    requestedDurationMonths?: number | null
+    requestedPlanId?: string
+  }
+) {
+  if (!plans.length) {
+    return null
+  }
+
+  if (query.requestedPlanId) {
+    const planMatch = plans.find((plan) => plan.planId === query.requestedPlanId)
+
+    if (planMatch) {
+      return planMatch
+    }
+  }
+
+  const courseScopedPlans = getPublicCheckoutCoursePlans(plans, query.requestedCourseId, query.requestedCourseSlug)
+  const candidatePlans = courseScopedPlans.length ? courseScopedPlans : plans
+
+  if (query.requestedDurationMonths) {
+    const durationMatch = candidatePlans.find((plan) => plan.durationMonths === query.requestedDurationMonths)
+
+    if (durationMatch) {
+      return durationMatch
+    }
+
+    return null
+  }
+
+  return candidatePlans.find((plan) => plan.planId === getDefaultPlanId(candidatePlans)) || candidatePlans[0] || null
+}
+
+function getPublicCheckoutCoursePlans(plans: BillingPlan[], requestedCourseId?: string, requestedCourseSlug?: string) {
+  if (requestedCourseId) {
+    const courseIdMatches = plans.filter((plan) => plan.course.courseId === requestedCourseId)
+
+    if (courseIdMatches.length) {
+      return courseIdMatches
+    }
+  }
+
+  const requestedCourseKey = normalizeCourseQueryKey(requestedCourseSlug || DEFAULT_PUBLIC_COURSE_SLUG)
+  const courseMatches = plans.filter((plan) => {
+    return [plan.course.slug, plan.course.title, plan.course.courseId]
+      .some((value) => normalizeCourseQueryKey(value || '') === requestedCourseKey)
+  })
+
+  if (courseMatches.length) {
+    return courseMatches
+  }
+
+  return plans.filter((plan) => isDefaultPublicCourse(plan.course))
+}
+
+function getRequestedCourseFromOptions(courses: CourseSummary[], requestedCourseId?: string, requestedCourseSlug?: string) {
+  if (requestedCourseId) {
+    const courseIdMatch = courses.find((course) => course.courseId === requestedCourseId)
+
+    if (courseIdMatch) {
+      return courseIdMatch
+    }
+  }
+
+  if (requestedCourseSlug) {
+    const requestedCourseKey = normalizeCourseQueryKey(requestedCourseSlug)
+    const courseSlugMatch = courses.find((course) => {
+      return [course.slug, course.title, course.courseId]
+        .some((value) => normalizeCourseQueryKey(value || '') === requestedCourseKey)
+    })
+
+    if (courseSlugMatch) {
+      return courseSlugMatch
+    }
+  }
+
+  return null
+}
+
+function isDefaultPublicCourse(course?: CourseSummary | null) {
+  if (!course) {
+    return false
+  }
+
+  return [course.slug, course.title, course.courseId]
+    .some((value) => normalizeCourseQueryKey(value || '') === DEFAULT_PUBLIC_COURSE_KEY)
+}
+
+function normalizeCourseQueryKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function getDefaultPlanId(plans: BillingPlan[], requestedPlanId?: string, requestedDurationMonths?: number | null) {
@@ -3099,8 +4458,22 @@ function getDefaultPlanId(plans: BillingPlan[], requestedPlanId?: string, reques
   )
 }
 
+function sortCourseOptions(courses: CourseSummary[]) {
+  return [...courses].sort((left, right) => {
+    return (left.displayOrder || 0) - (right.displayOrder || 0)
+  })
+}
+
 function formatPlanDuration(durationMonths: number) {
   return `${durationMonths} ${durationMonths === 1 ? 'Month' : 'Months'}`
+}
+
+function formatTrialDuration(durationHours: number) {
+  if (durationHours === 24) {
+    return '24-hour'
+  }
+
+  return `${durationHours}-hour`
 }
 
 function formatPlanTitle(plan: BillingPlan) {
@@ -3131,6 +4504,69 @@ function getQueryParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
 }
 
+function getFirstQueryValue(query: Record<string, string | string[] | undefined>, keys: string[]) {
+  for (const key of keys) {
+    const value = getQueryParam(query[key])
+
+    if (value) {
+      return value
+    }
+  }
+
+  return ''
+}
+
+function isMobileCheckoutRequest(query: Record<string, string | string[] | undefined>) {
+  if (typeof window !== 'undefined' && Boolean(window.ReactNativeWebView)) {
+    return true
+  }
+
+  if (hasRememberedMobileCheckoutContext()) {
+    return true
+  }
+
+  if (getFirstQueryValue(query, [...MOBILE_ACCESS_TOKEN_QUERY_KEYS, ...MOBILE_REFRESH_TOKEN_QUERY_KEYS])) {
+    return true
+  }
+
+  if (isTruthyQueryFlag(getQueryParam(query.mobile)) || isTruthyQueryFlag(getQueryParam(query.fromMobile))) {
+    return true
+  }
+
+  return MOBILE_CONTEXT_QUERY_KEYS.some((key) => {
+    const value = getQueryParam(query[key])
+
+    return value ? MOBILE_SOURCE_VALUES.has(value.trim().toLowerCase()) : false
+  })
+}
+
+function rememberMobileCheckoutContext() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.sessionStorage.setItem(MOBILE_CHECKOUT_CONTEXT_KEY, String(Date.now()))
+}
+
+function hasRememberedMobileCheckoutContext() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const rawTimestamp = window.sessionStorage.getItem(MOBILE_CHECKOUT_CONTEXT_KEY)
+  const timestamp = Number(rawTimestamp)
+
+  if (!Number.isFinite(timestamp)) {
+    return false
+  }
+
+  return Date.now() - timestamp <= MOBILE_CHECKOUT_CONTEXT_TTL_MS
+}
+
+function isTruthyQueryFlag(value: string | undefined) {
+  return value === '1' || value?.toLowerCase() === 'true'
+}
+
 function getQueryNumber(value: string | string[] | undefined) {
   const parsed = Number(getQueryParam(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
@@ -3154,7 +4590,49 @@ function getPaymentLinkUrl(created: PaymentLinkCreateResponse) {
 
 function getPaymentErrorCode(error: unknown) {
   if (error instanceof PaymentApiError) {
-    return typeof error.body?.code === 'string' ? error.body.code : ''
+    const code =
+      error.body?.code ||
+      error.body?.data?.code ||
+      error.body?.errorCode ||
+      error.body?.data?.errorCode
+
+    return typeof code === 'string' ? code : ''
+  }
+
+  return ''
+}
+
+function getTrialEligibilityMessage(quote: TrialQuoteResponse) {
+  return (
+    quote.eligibility?.message ||
+    quote.message ||
+    getTrialFallbackMessageFromCode(quote.eligibility?.code || quote.code) ||
+    'This trial is not available for this account. You can still choose a paid plan.'
+  )
+}
+
+function isTrialPaidFallbackError(error: unknown) {
+  return isTrialFallbackCode(getPaymentErrorCode(error))
+}
+
+function getTrialPaidFallbackMessage(error: unknown) {
+  return getTrialFallbackMessageFromCode(getPaymentErrorCode(error)) || getErrorMessage(
+    error,
+    'This trial is not available for this account. You can still choose a paid plan.'
+  )
+}
+
+function isTrialFallbackCode(code?: string) {
+  return code === 'TRIAL_NOT_AVAILABLE' || code === 'ACTIVE_ACCESS_EXISTS'
+}
+
+function getTrialFallbackMessageFromCode(code?: string) {
+  if (code === 'TRIAL_NOT_AVAILABLE') {
+    return 'This trial is not available right now. You can still choose a paid plan.'
+  }
+
+  if (code === 'ACTIVE_ACCESS_EXISTS') {
+    return 'You already have active access. Paid plans remain available if you want to extend it.'
   }
 
   return ''

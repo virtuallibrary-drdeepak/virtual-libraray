@@ -2,8 +2,8 @@ import { useRouter } from 'next/router'
 import { type ReactNode } from 'react'
 import Layout from '@/components/Layout'
 
-const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary'
-const APP_STORE_HREF = 'https://apps.apple.com/'
+const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
+const APP_STORE_HREF = 'https://apps.apple.com/in/app/virtual-library/id6761748966'
 
 const INCLUDED_FEATURES = [
   '24/7 live study rooms',

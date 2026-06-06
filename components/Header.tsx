@@ -21,7 +21,7 @@ export default function Header() {
         {/* Navigation moved to right */}
         <nav className="hidden md:flex items-center gap-6 text-sm ml-auto">
           <a href="/rankings" className="hover:text-indigo-600 font-semibold">
-            🏆 Daily Rankings
+            🏆 Rankings
           </a>
           <a href="/#whyjoin" className="hover:text-indigo-600">
             Why Join This

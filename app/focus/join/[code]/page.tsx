@@ -63,7 +63,7 @@ export default function Page({
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <a
-              href="https://play.google.com/store/apps/details?id=com.pushkardev123.VirtualLibrary"
+              href="https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN"
               target="_blank"
               rel="noreferrer"
               className="inline-flex w-full items-center justify-center rounded-xl transition hover:bg-black/35 sm:w-auto"
@@ -75,7 +75,7 @@ export default function Page({
               />
             </a>
             <a
-              href="https://apps.apple.com/"
+              href="https://apps.apple.com/in/app/virtual-library/id6761748966"
               target="_blank"
               rel="noreferrer"
               className="inline-flex w-full items-center justify-center rounded-xl transition hover:bg-black/35 sm:w-auto"

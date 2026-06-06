@@ -18,6 +18,15 @@ export type BillingPlan = {
   course: CourseSummary
 }
 
+export type TrialOffer = {
+  code: string
+  durationHours: number
+  amountPaise: number
+  currency: string
+  requiresOtp: boolean
+  course: CourseSummary
+}
+
 export type BillingPlansResponse = {
   plans: BillingPlan[]
   selectedCourse: CourseSummary | null
@@ -29,6 +38,7 @@ export type BillingPlansResponse = {
 export type PublicBillingPlansResponse = {
   plans: BillingPlan[]
   course: CourseSummary | null
+  trialOffer?: TrialOffer | null
   code?: string
   message?: string
 }
@@ -48,6 +58,18 @@ export type BillingCoupon = {
   discountType?: string
   discountValue?: number
   maxDiscountPaise?: number | null
+}
+
+export type AvailableBillingCoupon = BillingCoupon & {
+  validUntil?: string | null
+  pricing?: BillingPricing | null
+  applicablePlans?: BillingPlan[]
+}
+
+export type AvailableBillingCouponsResponse = {
+  coupons: AvailableBillingCoupon[]
+  code?: string
+  message?: string
 }
 
 export type BillingQuoteResponse = {
@@ -197,6 +219,34 @@ export type CheckoutOtpVerifyResponse = {
   courseAccess?: any
 }
 
+export type TrialQuoteResponse = {
+  eligibility?: {
+    eligible?: boolean
+    message?: string
+    code?: string
+    reason?: string
+  }
+  code?: string
+  message?: string
+  trialOffer?: TrialOffer
+  plan?: BillingPlan
+  course?: CourseSummary
+}
+
+export type TrialVerifyResponse = CheckoutOtpVerifyResponse & {
+  returnUrl?: string
+  trial?: {
+    code?: string
+    durationHours?: number
+    expiresAt?: string
+  }
+}
+
+export type PasswordResetResponse = {
+  ok: boolean
+  message?: string
+}
+
 export class PaymentApiError extends Error {
   status: number
   body: any
@@ -277,6 +327,25 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}) {
   return apiFetchInternal<T>(path, init, true)
 }
 
+export async function authPost<TResponse>(path: string, body: unknown): Promise<TResponse> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    credentials: 'omit',
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new PaymentApiError(data?.message || 'Request failed', response.status, data)
+  }
+
+  return data as TResponse
+}
+
 async function apiFetchInternal<T>(path: string, init: ApiFetchInit = {}, allowRefresh = true) {
   const { skipAuth, ...fetchInit } = init
   const accessToken = skipAuth ? null : tokenStore.getAccessToken()
@@ -342,6 +411,19 @@ export async function verifyOtp(phoneInput: string, otp: string) {
       identifier: phone.e164,
       code: otp.trim(),
     }),
+  })
+}
+
+export async function requestPasswordReset(email: string) {
+  return authPost<PasswordResetResponse>('/auth/forgot-password', {
+    email,
+  })
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  return authPost<PasswordResetResponse>('/auth/reset-password', {
+    token,
+    newPassword,
   })
 }
 
