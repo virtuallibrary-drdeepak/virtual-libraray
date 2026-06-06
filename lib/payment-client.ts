@@ -60,6 +60,18 @@ export type BillingCoupon = {
   maxDiscountPaise?: number | null
 }
 
+export type AvailableBillingCoupon = BillingCoupon & {
+  validUntil?: string | null
+  pricing?: BillingPricing | null
+  applicablePlans?: BillingPlan[]
+}
+
+export type AvailableBillingCouponsResponse = {
+  coupons: AvailableBillingCoupon[]
+  code?: string
+  message?: string
+}
+
 export type BillingQuoteResponse = {
   couponStatus: 'NONE' | 'APPLIED' | 'INVALID' | string
   isValidCoupon: boolean

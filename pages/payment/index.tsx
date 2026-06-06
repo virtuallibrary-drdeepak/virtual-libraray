@@ -4,6 +4,8 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   apiFetch,
+  AvailableBillingCoupon,
+  AvailableBillingCouponsResponse,
   BillingOrderResponse,
   BillingPlan,
   BillingPlansResponse,
@@ -184,6 +186,8 @@ export default function PaymentPage() {
   const [couponLoading, setCouponLoading] = useState(false)
   const [couponMessage, setCouponMessage] = useState('')
   const [couponError, setCouponError] = useState('')
+  const [availableCoupons, setAvailableCoupons] = useState<AvailableBillingCoupon[]>([])
+  const [availableCouponsLoading, setAvailableCouponsLoading] = useState(false)
   const [razorpayReady, setRazorpayReady] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [result, setResult] = useState<ResultState | null>(null)
@@ -384,6 +388,16 @@ export default function PaymentPage() {
     setTrialError('')
     setTrialMessage('')
   }, [selectedPlanId])
+
+  useEffect(() => {
+    if (!selectedPlanId) {
+      setAvailableCoupons([])
+      setAvailableCouponsLoading(false)
+      return
+    }
+
+    void loadAvailableCoupons(selectedPlanId)
+  }, [authMode, selectedPlanId, sessionUser?.phoneE164])
 
   useEffect(() => {
     return () => {
@@ -998,8 +1012,32 @@ export default function PaymentPage() {
     }
   }
 
-  async function handleApplyCoupon() {
-    const nextCouponCode = normalizeCouponInput(couponCode)
+  async function loadAvailableCoupons(planId: string) {
+    setAvailableCouponsLoading(true)
+
+    try {
+      const response = await apiFetch<AvailableBillingCouponsResponse>(
+        `/billing/coupons/available?planId=${encodeURIComponent(planId)}`
+      )
+
+      if (selectedPlanIdRef.current !== planId) {
+        return
+      }
+
+      setAvailableCoupons(Array.isArray(response.coupons) ? response.coupons : [])
+    } catch {
+      if (selectedPlanIdRef.current === planId) {
+        setAvailableCoupons([])
+      }
+    } finally {
+      if (selectedPlanIdRef.current === planId) {
+        setAvailableCouponsLoading(false)
+      }
+    }
+  }
+
+  async function handleApplyCoupon(couponCodeOverride?: string) {
+    const nextCouponCode = normalizeCouponInput(couponCodeOverride || couponCode)
 
     if (!selectedPlan) {
       setCouponError('Select a plan before applying a coupon.')
@@ -1065,6 +1103,19 @@ export default function PaymentPage() {
     } finally {
       setCouponLoading(false)
     }
+  }
+
+  async function handleSelectAvailableCoupon(coupon: AvailableBillingCoupon) {
+    const nextCouponCode = normalizeCouponInput(coupon.code)
+
+    if (!nextCouponCode || activeCouponCode === nextCouponCode) {
+      return
+    }
+
+    setCouponCode(nextCouponCode)
+    setCouponError('')
+    setCouponMessage('')
+    await handleApplyCoupon(nextCouponCode)
   }
 
   function handleRemoveCoupon() {
@@ -2976,6 +3027,8 @@ export default function PaymentPage() {
                 error={couponError}
                 loading={couponLoading}
                 message={couponMessage}
+                availableCoupons={availableCoupons}
+                availableCouponsLoading={availableCouponsLoading}
                 onApply={handleApplyCoupon}
                 onChange={(value) => {
                   setCouponCode(normalizeCouponInput(value))
@@ -2987,6 +3040,7 @@ export default function PaymentPage() {
                   }
                 }}
                 onRemove={handleRemoveCoupon}
+                onSelectAvailableCoupon={handleSelectAvailableCoupon}
                 pricing={checkoutPricing}
               />
             )}
@@ -3418,6 +3472,8 @@ export default function PaymentPage() {
 
 function CouponSection({
   appliedCode,
+  availableCoupons,
+  availableCouponsLoading,
   couponCode,
   disabled,
   error,
@@ -3426,9 +3482,12 @@ function CouponSection({
   onApply,
   onChange,
   onRemove,
+  onSelectAvailableCoupon,
   pricing,
 }: {
   appliedCode: string
+  availableCoupons: AvailableBillingCoupon[]
+  availableCouponsLoading: boolean
   couponCode: string
   disabled: boolean
   error: string
@@ -3437,10 +3496,12 @@ function CouponSection({
   onApply: () => void
   onChange: (value: string) => void
   onRemove: () => void
+  onSelectAvailableCoupon: (coupon: AvailableBillingCoupon) => void
   pricing: BillingPricing
 }) {
   const [expanded, setExpanded] = useState(Boolean(couponCode || appliedCode || error || message))
   const hasAppliedCoupon = Boolean(appliedCode)
+  const hasAvailableCoupons = availableCoupons.length > 0
   const canApply = Boolean(couponCode.trim()) && !disabled && !hasAppliedCoupon
   const applyCoupon = () => {
     if (canApply && !loading) {
@@ -3462,9 +3523,49 @@ function CouponSection({
         className="flex w-full items-center gap-2 text-left text-xs font-semibold text-[#681ee6] transition hover:text-[#4f15bd]"
       >
         <TagIcon className="h-4 w-4 shrink-0" />
-        <span>Have a coupon code?</span>
-        <span className="font-medium text-[#9b93aa]">(Optional)</span>
+        <span>Coupon code</span>
+        {hasAvailableCoupons && (
+          <span className="ml-auto rounded-full bg-[#f2eaff] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#681ee6]">
+            {availableCoupons.length} available
+          </span>
+        )}
+        {!hasAvailableCoupons && availableCouponsLoading && (
+          <span className="ml-auto rounded-full bg-[#f7f4fb] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#9b93aa]">
+            Checking
+          </span>
+        )}
       </button>
+
+      {!hasAppliedCoupon && hasAvailableCoupons && (
+        <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
+          {availableCoupons.map((coupon) => {
+            const normalizedCode = normalizeCouponInput(coupon.code)
+            const isSelected = normalizedCode === normalizeCouponInput(couponCode)
+
+            return (
+              <button
+                key={coupon.code}
+                type="button"
+                onClick={() => onSelectAvailableCoupon(coupon)}
+                disabled={disabled || loading}
+                className={cn(
+                  'min-w-[128px] rounded-[14px] border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
+                  isSelected
+                    ? 'border-[#7b2fee] bg-[#f6efff] text-[#211536]'
+                    : 'border-[#eee5f8] bg-white text-[#211536] hover:border-[#cdb7f8]'
+                )}
+              >
+                <span className="block truncate text-xs font-black uppercase tracking-[0.08em] text-[#681ee6]">
+                  {coupon.code}
+                </span>
+                <span className="mt-1 block truncate text-xs font-semibold text-[#6f657b]">
+                  {getAvailableCouponBenefit(coupon)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {expanded && (
         <div className="mt-2.5 flex items-end gap-2">
@@ -4142,6 +4243,30 @@ function getCheckoutPricing(plan: BillingPlan | null, quote: BillingQuoteRespons
     finalAmountPaise: plan.amountPaise,
     currency: plan.currency,
   }
+}
+
+function getAvailableCouponBenefit(coupon: AvailableBillingCoupon) {
+  const pricing = coupon.pricing
+
+  if (pricing?.discountAmountPaise && pricing.discountAmountPaise > 0) {
+    return `Save ${formatCurrency(pricing.discountAmountPaise, pricing.currency)}`
+  }
+
+  const discountType = coupon.discountType?.toUpperCase()
+
+  if (discountType === 'PERCENT' || discountType === 'PERCENTAGE') {
+    return `${coupon.discountValue || 0}% off`
+  }
+
+  if (coupon.discountValue && coupon.discountValue > 0) {
+    const amountPaise = discountType === 'FLAT' || discountType === 'AMOUNT'
+      ? coupon.discountValue
+      : coupon.discountValue * 100
+
+    return `${formatCurrency(amountPaise, pricing?.currency || 'INR')} off`
+  }
+
+  return coupon.name || 'Apply coupon'
 }
 
 function normalizeCouponInput(value: string) {
