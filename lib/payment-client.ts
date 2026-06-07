@@ -208,6 +208,7 @@ export type PaymentLinkStatusResponse = {
 export type CheckoutOtpVerifyResponse = {
   accessToken?: string
   refreshToken?: string
+  emailVerificationRequired?: boolean
   isNewUser?: boolean
   accountReady?: boolean
   subscription?: {

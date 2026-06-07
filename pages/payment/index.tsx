@@ -54,6 +54,7 @@ type ScreenState =
 type AuthMode = 'unknown' | 'cookie' | 'bearer' | 'unauthenticated'
 type AccountSetupStep = 'profile' | 'course'
 type AccountGender = 'FEMALE' | 'MALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | ''
+type SignupGender = 'FEMALE' | 'MALE' | 'PREFER_NOT_TO_SAY' | ''
 type TrialOtpChannel = 'sms' | 'whatsapp'
 type TrialAction = 'quote' | 'send' | 'verify'
 
@@ -91,6 +92,13 @@ type PaymentLinkCustomerPayload = {
   phoneE164?: string
 }
 
+type GuestSignupCheckoutPayload = {
+  email: string
+  gender?: SignupGender
+  name: string
+  phoneE164: string
+}
+
 type PrivacyPolicyVersionsResponse = {
   latest?: {
     version?: string
@@ -103,9 +111,13 @@ const EMPTY_BILLING_DETAILS: BillingDetails = {
 
 const CHECKOUT_PAYMENT_ORDER_ID_KEY = 'checkoutPaymentOrderId'
 const CHECKOUT_CLAIM_TOKEN_KEY = 'checkoutClaimToken'
+const CHECKOUT_PAYMENT_URL_KEY = 'checkoutPaymentUrl'
 const CHECKOUT_PHONE_KEY = 'checkoutPhoneE164'
 const CHECKOUT_EMAIL_KEY = 'checkoutEmail'
+const CHECKOUT_NAME_KEY = 'checkoutName'
+const CHECKOUT_GENDER_KEY = 'checkoutGender'
 const CHECKOUT_ACCOUNT_EXISTS_KEY = 'checkoutAccountExists'
+const CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY = 'checkoutAccountSetupRequired'
 const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
 const MOBILE_CHECKOUT_CONTEXT_KEY = 'vl_mobile_checkout_context'
@@ -206,6 +218,9 @@ export default function PaymentPage() {
   const [billingDetails, setBillingDetails] = useState<BillingDetails>(EMPTY_BILLING_DETAILS)
   const [sessionUser, setSessionUser] = useState<PaymentSessionUser | null>(null)
   const [billingError, setBillingError] = useState('')
+  const [checkoutName, setCheckoutName] = useState('')
+  const [checkoutGender, setCheckoutGender] = useState<SignupGender>('')
+  const [checkoutTermsAccepted, setCheckoutTermsAccepted] = useState(false)
   const [paymentPhoneOtpRequired, setPaymentPhoneOtpRequired] = useState(false)
   const [paymentOrderId, setPaymentOrderId] = useState('')
   const [statusTimedOut, setStatusTimedOut] = useState(false)
@@ -214,9 +229,10 @@ export default function PaymentPage() {
   const [accountOtpStarted, setAccountOtpStarted] = useState(false)
   const [accountOtp, setAccountOtp] = useState('')
   const [accountName, setAccountName] = useState('')
-  const [accountAge, setAccountAge] = useState('')
   const [accountGender, setAccountGender] = useState<AccountGender>('')
-  const [accountTermsAccepted, setAccountTermsAccepted] = useState(false)
+  const [accountPassword, setAccountPassword] = useState('')
+  const [accountConfirmPassword, setAccountConfirmPassword] = useState('')
+  const [accountPasswordVisible, setAccountPasswordVisible] = useState(false)
   const [accountError, setAccountError] = useState('')
   const [trialName, setTrialName] = useState('')
   const [trialGender, setTrialGender] = useState<AccountGender>('')
@@ -234,7 +250,7 @@ export default function PaymentPage() {
   const courseIdFromQuery = getQueryParam(router.query.courseId)
   const courseSlugFromQuery = getQueryParam(router.query.courseSlug)
   const durationMonthsFromQuery = getQueryNumber(router.query.durationMonths)
-  const paymentStatusFromQuery = getQueryParam(router.query.paymentStatus)
+  const paymentStatusFromQuery = getQueryParam(router.query.paymentStatus) || getQueryParam(router.query.status)
   const checkoutSource = getQueryParam(router.query.source)
   const checkoutMode = getQueryParam(router.query.mode)
   const isLegacyCheckoutFlow = checkoutMode === 'legacy'
@@ -444,11 +460,33 @@ export default function PaymentPage() {
     setBillingError('')
   }
 
-  function getGuestContactPayload() {
+  function getGuestSignupCheckoutPayload({
+    requireGender,
+    requireTerms,
+  }: {
+    requireGender: boolean
+    requireTerms: boolean
+  }): GuestSignupCheckoutPayload | null {
+    const name = checkoutName.trim()
     const validationError = validateBillingDetails(billingDetails, phone)
 
     if (validationError) {
       setBillingError(validationError)
+      return null
+    }
+
+    if (!name) {
+      setBillingError('Enter your full name.')
+      return null
+    }
+
+    if (requireGender && !checkoutGender) {
+      setBillingError('Choose your gender.')
+      return null
+    }
+
+    if (requireTerms && !checkoutTermsAccepted) {
+      setBillingError('Accept the terms and privacy policy to continue.')
       return null
     }
 
@@ -458,6 +496,8 @@ export default function PaymentPage() {
       return {
         phoneE164: normalizedPhone.e164,
         email: billingDetails.email.trim().toLowerCase(),
+        name,
+        gender: checkoutGender || undefined,
       }
     } catch (error) {
       setBillingError(getErrorMessage(error, 'Enter a valid mobile number.'))
@@ -465,12 +505,25 @@ export default function PaymentPage() {
     }
   }
 
-  function getPaymentLinkCustomerPayload(): PaymentLinkCustomerPayload | null {
+  function getPaymentLinkCustomerPayload(payload: GuestSignupCheckoutPayload): PaymentLinkCustomerPayload {
+    return {
+      phoneE164: payload.phoneE164,
+      email: payload.email,
+      name: payload.name,
+    }
+  }
+
+  function getSessionPaymentLinkCustomerPayload(): PaymentLinkCustomerPayload | null {
     if (sessionUser) {
       return {}
     }
 
-    return getGuestContactPayload()
+    const payload = getGuestSignupCheckoutPayload({
+      requireGender: true,
+      requireTerms: true,
+    })
+
+    return payload ? getPaymentLinkCustomerPayload(payload) : null
   }
 
   async function loadSessionUser() {
@@ -578,6 +631,21 @@ export default function PaymentPage() {
     setAccountError('')
     setSessionUser(null)
     setAuthMode(tokenStore.getAccessToken() ? 'bearer' : 'unknown')
+    void logLocalCheckoutDebug('bootstrap_start', {
+      query: {
+        checkoutMode: checkoutMode || '',
+        checkoutSource: checkoutSource || '',
+        durationMonths: durationMonthsFromQuery,
+        hasPaymentStatus: Boolean(paymentStatusFromQuery),
+        hasPlanId: Boolean(planIdFromQuery),
+        paymentStatus: paymentStatusFromQuery || '',
+      },
+      flow: {
+        isLegacyCheckoutFlow,
+        isPrimaryPaymentLinksFlow,
+        shouldUseV2WebFallback,
+      },
+    })
 
     if (paymentStatusFromQuery) {
       await handlePaymentLinkResult(paymentStatusFromQuery)
@@ -590,7 +658,7 @@ export default function PaymentPage() {
     }
 
     const storedCheckoutSession = getStoredCheckoutSession()
-    const orderIdFromQuery = getQueryParam(router.query.orderId)
+    const orderIdFromQuery = getQueryParam(router.query.orderId) || getQueryParam(router.query.paymentOrderId)
     const checkoutOrderId = orderIdFromQuery || storedCheckoutSession.orderId
 
     if (checkoutOrderId && storedCheckoutSession.claimToken) {
@@ -770,7 +838,7 @@ export default function PaymentPage() {
       setSelectedPlanId(matchingPlan.planId)
       setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
       setScreen('ready')
-      setStatusNote(user ? 'Review your plan and apply a coupon if you have one.' : 'Enter contact details to create your Razorpay payment link.')
+      setStatusNote(user ? 'Review your plan and apply a coupon if you have one.' : 'Enter your signup details to create your Razorpay payment link.')
     } catch (error) {
       setScreen('error')
       setPageError(getErrorMessage(error, 'Unable to load selected plan. Please try again.'))
@@ -1060,11 +1128,24 @@ export default function PaymentPage() {
     try {
       const requestPlanId = selectedPlan.planId
       const quoteEndpoint = getCouponPreviewEndpoint()
+      const guestQuotePayload = isPrimaryPaymentLinksFlow && !sessionUser
+        ? getGuestSignupCheckoutPayload({
+          requireGender: false,
+          requireTerms: false,
+        })
+        : null
+
+      if (isPrimaryPaymentLinksFlow && !sessionUser && !guestQuotePayload) {
+        setCouponLoading(false)
+        return
+      }
+
       const quote = await apiFetch<BillingQuoteResponse>(quoteEndpoint, {
         method: 'POST',
-        skipAuth: quoteEndpoint === '/billing/plans/quote',
+        skipAuth: isPrimaryPaymentLinksFlow && !sessionUser,
         body: JSON.stringify({
           planId: requestPlanId,
+          ...(guestQuotePayload ? getPaymentLinkCustomerPayload(guestQuotePayload) : {}),
           couponCode: nextCouponCode,
         }),
       })
@@ -1388,11 +1469,11 @@ export default function PaymentPage() {
   }
 
   function getCouponPreviewEndpoint() {
-    if (!isPrimaryPaymentLinksFlow) {
-      return '/billing/quote'
+    if (isPrimaryPaymentLinksFlow && !sessionUser) {
+      return '/billing/guest/payment-links/quote'
     }
 
-    return sessionUser ? '/billing/guest/payment-links/quote' : '/billing/plans/quote'
+    return '/billing/quote'
   }
 
   async function revalidatePaymentLinkCoupon(
@@ -1450,12 +1531,12 @@ export default function PaymentPage() {
       return
     }
 
-    if (isPrimaryPaymentLinksFlow) {
+    if (isPrimaryPaymentLinksFlow && !sessionUser) {
       await createPaymentLink()
       return
     }
 
-    const validationError = validateBillingDetails(billingDetails, phone)
+    const validationError = isPrimaryPaymentLinksFlow ? '' : validateBillingDetails(billingDetails, phone)
 
     if (validationError) {
       setBillingError(validationError)
@@ -1508,7 +1589,17 @@ export default function PaymentPage() {
       return
     }
 
-    const customerPayload = getPaymentLinkCustomerPayload()
+    const guestSignupPayload = sessionUser
+      ? null
+      : getGuestSignupCheckoutPayload({
+        requireGender: true,
+        requireTerms: true,
+      })
+    const customerPayload = sessionUser
+      ? getSessionPaymentLinkCustomerPayload()
+      : guestSignupPayload
+        ? getPaymentLinkCustomerPayload(guestSignupPayload)
+        : null
 
     if (!customerPayload) {
       return
@@ -1521,6 +1612,17 @@ export default function PaymentPage() {
     setResult(null)
     setStatusTimedOut(false)
     setStatusNote('Creating your Razorpay payment link...')
+    void logLocalCheckoutDebug('guest_payment_link_create_start', {
+      planId: selectedPlan.planId,
+      courseId: selectedCourse?.courseId || '',
+      couponPresent: Boolean(activeCouponCode),
+      customer: {
+        emailMasked: maskEmail(customerPayload.email || ''),
+        gender: guestSignupPayload?.gender || '',
+        namePresent: Boolean(customerPayload.name),
+        phoneMasked: maskPhone(customerPayload.phoneE164 || ''),
+      },
+    })
 
     try {
       const couponCodeForSubmit = getCouponCodeForSubmit(activeCouponCode)
@@ -1537,6 +1639,31 @@ export default function PaymentPage() {
           setCheckoutLoading(false)
           return
         }
+      }
+
+      if (!sessionUser && !couponCodeForSubmit) {
+        setStatusNote('Checking checkout total...')
+        const quote = await apiFetch<BillingQuoteResponse>('/billing/guest/payment-links/quote', {
+          method: 'POST',
+          skipAuth: true,
+          body: JSON.stringify({
+            planId: selectedPlan.planId,
+            ...customerPayload,
+          }),
+        })
+
+        if (selectedPlanIdRef.current !== selectedPlan.planId) {
+          setCheckoutLoading(false)
+          return
+        }
+
+        setCouponQuote(quote)
+        void logLocalCheckoutDebug('guest_payment_link_quote_success', {
+          planId: selectedPlan.planId,
+          couponStatus: quote.couponStatus,
+          finalAmountPaise: quote.pricing?.finalAmountPaise,
+          isValidCoupon: quote.isValidCoupon,
+        })
       }
 
       setStatusNote('Creating your Razorpay payment link...')
@@ -1567,14 +1694,30 @@ export default function PaymentPage() {
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
         window.sessionStorage.setItem(CHECKOUT_CLAIM_TOKEN_KEY, created.checkout.claimToken)
-        window.sessionStorage.setItem(CHECKOUT_PHONE_KEY, sessionUser?.phoneE164 || customerPayload.phoneE164 || '')
-        window.sessionStorage.setItem(CHECKOUT_EMAIL_KEY, sessionUser?.email || customerPayload.email || '')
+        window.sessionStorage.setItem(CHECKOUT_PAYMENT_URL_KEY, paymentUrl)
+        window.sessionStorage.setItem(CHECKOUT_PHONE_KEY, sessionUser?.phoneE164 || guestSignupPayload?.phoneE164 || customerPayload.phoneE164 || '')
+        window.sessionStorage.setItem(CHECKOUT_EMAIL_KEY, sessionUser?.email || guestSignupPayload?.email || customerPayload.email || '')
+        window.sessionStorage.setItem(CHECKOUT_NAME_KEY, sessionUser?.name || guestSignupPayload?.name || customerPayload.name || '')
+        window.sessionStorage.setItem(CHECKOUT_GENDER_KEY, guestSignupPayload?.gender || '')
         window.sessionStorage.setItem(
           CHECKOUT_ACCOUNT_EXISTS_KEY,
           Boolean(created.customer?.accountExists || sessionUser) ? '1' : '0'
         )
+        window.sessionStorage.setItem(
+          CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY,
+          created.checkout.accountSetupRequired ? '1' : '0'
+        )
         window.sessionStorage.setItem(CHECKOUT_SESSION_USER_KEY, sessionUser ? '1' : '0')
       }
+
+      await logLocalCheckoutDebug('guest_payment_link_created_and_stored', {
+        orderId: created.order?.id || '',
+        claimPresent: Boolean(created.checkout.claimToken),
+        accountSetupRequired: Boolean(created.checkout.accountSetupRequired),
+        accountExists: Boolean(created.customer?.accountExists || sessionUser),
+        paymentHost: getUrlHost(paymentUrl),
+        storageAfterCreate: getStoredCheckoutSessionDebugSummary(),
+      })
 
       postMobileEvent('OPEN_PAYMENT_LINK', {
         planId: selectedPlan.planId,
@@ -1584,6 +1727,11 @@ export default function PaymentPage() {
       window.location.assign(paymentUrl)
     } catch (error) {
       const errorCode = getPaymentErrorCode(error)
+      void logLocalCheckoutDebug('guest_payment_link_create_error', {
+        errorCode,
+        message: getErrorMessage(error, 'Could not create the payment link.'),
+        status: error instanceof PaymentApiError ? error.status : undefined,
+      })
 
       if (error instanceof PaymentApiError && error.status === 401 && sessionUser) {
         tokenStore.clear()
@@ -1635,9 +1783,15 @@ export default function PaymentPage() {
 
     if (paymentLink && typeof window !== 'undefined') {
       setStatusNote('Opening Razorpay payment page...')
+      const orderId = order.order?.id || order.orderId || ''
+
+      if (orderId) {
+        window.sessionStorage.setItem(LEGACY_PAYMENT_ORDER_ID_KEY, orderId)
+      }
+
       postMobileEvent('OPEN_PAYMENT_LINK', {
         planId: order.plan?.planId,
-        orderId: order.order?.id || order.orderId,
+        orderId,
         paymentLink,
       })
       window.location.assign(paymentLink)
@@ -1856,7 +2010,7 @@ export default function PaymentPage() {
   async function handlePaymentLinkResult(paymentStatus: string) {
     const normalizedStatus = paymentStatus.toLowerCase()
     const storedCheckoutSession = getStoredCheckoutSession()
-    const orderIdFromQuery = getQueryParam(router.query.orderId)
+    const orderIdFromQuery = getQueryParam(router.query.orderId) || getQueryParam(router.query.paymentOrderId)
     const storedOrderId = typeof window !== 'undefined'
       ? storedCheckoutSession.orderId || window.sessionStorage.getItem(LEGACY_PAYMENT_ORDER_ID_KEY) || ''
       : ''
@@ -1865,6 +2019,14 @@ export default function PaymentPage() {
     setPaymentOrderId(nextPaymentOrderId)
     setCheckoutLoading(false)
     setStatusTimedOut(false)
+    void logLocalCheckoutDebug('payment_link_result_start', {
+      paymentStatus,
+      normalizedStatus,
+      orderIdFromQuery: orderIdFromQuery || '',
+      storedOrderId,
+      nextPaymentOrderId,
+      storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
+    })
 
     if (storedCheckoutSession.claimToken && !storedCheckoutSession.sessionUser && (normalizedStatus === 'success' || normalizedStatus === 'captured')) {
       setScreen('pending')
@@ -2001,8 +2163,20 @@ export default function PaymentPage() {
       const isStoredSessionCheckout = storedCheckoutSession.sessionUser
       const canCheckAuthenticatedStatus =
         isStoredSessionCheckout || Boolean(tokenStore.getAccessToken()) || authMode === 'cookie'
+      void logLocalCheckoutDebug('payment_link_status_check_start', {
+        orderId,
+        manual,
+        claimPresent: Boolean(claimToken),
+        canCheckAuthenticatedStatus,
+        storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
+      })
 
       if (isPrimaryPaymentLinksFlow && !claimToken && !canCheckAuthenticatedStatus) {
+        void logLocalCheckoutDebug('payment_link_status_check_blocked_missing_claim', {
+          orderId,
+          authMode,
+          storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
+        })
         setScreen('error')
         setPageError('Checkout session could not be verified. Please contact support with your payment id.')
         return false
@@ -2029,8 +2203,20 @@ export default function PaymentPage() {
         isGuestCheckout &&
         !status.accessGranted &&
         (normalizedOrderStatus === 'ACCOUNT_SETUP_REQUIRED' || status.accountSetupRequired || captured)
-      const completed = status.accessGranted || (!isGuestCheckout && (normalizedOrderStatus === 'COMPLETED' || captured))
+      const completed = status.accessGranted || normalizedOrderStatus === 'COMPLETED' || (!isGuestCheckout && captured)
       const failed = normalizedOrderStatus === 'FAILED' || normalizedPaymentStatus === 'FAILED'
+      void logLocalCheckoutDebug('payment_link_status_response', {
+        orderId,
+        status: status.status || '',
+        paymentStatus: status.paymentStatus || '',
+        accountSetupRequired: Boolean(status.accountSetupRequired),
+        accessGranted: Boolean(status.accessGranted),
+        captured,
+        completed,
+        failed,
+        isGuestCheckout,
+        providerPaymentIdPresent: Boolean(status.order?.providerPaymentId),
+      })
 
       if (needsAccountSetup) {
         if (pendingPollRef.current) {
@@ -2102,6 +2288,12 @@ export default function PaymentPage() {
 
       return false
     } catch (error) {
+      void logLocalCheckoutDebug('payment_link_status_check_error', {
+        orderId,
+        manual,
+        message: getErrorMessage(error, 'Unable to check payment status.'),
+        status: error instanceof PaymentApiError ? error.status : undefined,
+      })
       if (manual) {
         setPageError(getErrorMessage(error, 'Unable to check payment status. Please try again.'))
       }
@@ -2118,14 +2310,107 @@ export default function PaymentPage() {
     return window.sessionStorage.getItem(CHECKOUT_CLAIM_TOKEN_KEY) || ''
   }
 
+  async function logLocalCheckoutDebug(event: string, details: Record<string, any> = {}) {
+    if (!shouldLogLocalCheckoutDebug()) {
+      return
+    }
+
+    try {
+      await fetch('/api/checkout-debug/log', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          event,
+          details: {
+            ...details,
+            page: getCheckoutDebugPageSummary(),
+            storagePresence: getCheckoutStoragePresence(),
+            currentStoredSession: getStoredCheckoutSessionDebugSummary(),
+          },
+        }),
+        keepalive: true,
+      })
+    } catch {
+      // Local dev diagnostics must never affect checkout behavior.
+    }
+  }
+
+  function shouldLogLocalCheckoutDebug() {
+    if (process.env.NODE_ENV !== 'development' || typeof window === 'undefined') {
+      return false
+    }
+
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '::1'
+  }
+
+  function getCheckoutDebugPageSummary() {
+    const searchParams = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams()
+
+    return {
+      authMode,
+      hasOrderIdQuery: Boolean(getQueryParam(router.query.orderId) || getQueryParam(router.query.paymentOrderId)),
+      isMobileCheckout,
+      isPrimaryPaymentLinksFlow,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      paymentOrderId,
+      paymentStatusFromQuery: paymentStatusFromQuery || '',
+      screen,
+      searchKeys: Array.from(searchParams.keys()).sort(),
+      selectedPlanId,
+      sessionUserPresent: Boolean(sessionUser),
+    }
+  }
+
+  function getCheckoutStoragePresence() {
+    if (typeof window === 'undefined') {
+      return {}
+    }
+
+    return {
+      accountExists: Boolean(window.sessionStorage.getItem(CHECKOUT_ACCOUNT_EXISTS_KEY)),
+      accountSetupRequired: Boolean(window.sessionStorage.getItem(CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY)),
+      claim: Boolean(window.sessionStorage.getItem(CHECKOUT_CLAIM_TOKEN_KEY)),
+      email: Boolean(window.sessionStorage.getItem(CHECKOUT_EMAIL_KEY)),
+      gender: Boolean(window.sessionStorage.getItem(CHECKOUT_GENDER_KEY)),
+      name: Boolean(window.sessionStorage.getItem(CHECKOUT_NAME_KEY)),
+      orderId: Boolean(window.sessionStorage.getItem(CHECKOUT_PAYMENT_ORDER_ID_KEY)),
+      paymentUrl: Boolean(window.sessionStorage.getItem(CHECKOUT_PAYMENT_URL_KEY)),
+      phone: Boolean(window.sessionStorage.getItem(CHECKOUT_PHONE_KEY)),
+      sessionUser: Boolean(window.sessionStorage.getItem(CHECKOUT_SESSION_USER_KEY)),
+    }
+  }
+
+  function getStoredCheckoutSessionDebugSummary(session = getStoredCheckoutSession()) {
+    return {
+      accountExists: session.accountExists,
+      accountSetupRequired: session.accountSetupRequired,
+      claimPresent: Boolean(session.claimToken),
+      emailMasked: maskEmail(session.email),
+      gender: session.gender,
+      namePresent: Boolean(session.name),
+      orderId: session.orderId,
+      paymentHost: getUrlHost(session.paymentUrl),
+      phoneMasked: maskPhone(session.phoneE164),
+      sessionUser: session.sessionUser,
+    }
+  }
+
   function getStoredCheckoutSession() {
     if (typeof window === 'undefined') {
       return {
         orderId: '',
         claimToken: '',
+        paymentUrl: '',
         phoneE164: '',
         email: '',
+        name: '',
+        gender: '' as SignupGender,
         accountExists: false,
+        accountSetupRequired: false,
         sessionUser: false,
       }
     }
@@ -2133,9 +2418,13 @@ export default function PaymentPage() {
     return {
       orderId: window.sessionStorage.getItem(CHECKOUT_PAYMENT_ORDER_ID_KEY) || '',
       claimToken: window.sessionStorage.getItem(CHECKOUT_CLAIM_TOKEN_KEY) || '',
+      paymentUrl: window.sessionStorage.getItem(CHECKOUT_PAYMENT_URL_KEY) || '',
       phoneE164: window.sessionStorage.getItem(CHECKOUT_PHONE_KEY) || '',
       email: window.sessionStorage.getItem(CHECKOUT_EMAIL_KEY) || '',
+      name: window.sessionStorage.getItem(CHECKOUT_NAME_KEY) || '',
+      gender: normalizeStoredSignupGender(window.sessionStorage.getItem(CHECKOUT_GENDER_KEY) || ''),
       accountExists: window.sessionStorage.getItem(CHECKOUT_ACCOUNT_EXISTS_KEY) === '1',
+      accountSetupRequired: window.sessionStorage.getItem(CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY) === '1',
       sessionUser: window.sessionStorage.getItem(CHECKOUT_SESSION_USER_KEY) === '1',
     }
   }
@@ -2145,18 +2434,36 @@ export default function PaymentPage() {
       return
     }
 
+    void logLocalCheckoutDebug('checkout_session_clear', {
+      storedSessionBeforeClear: getStoredCheckoutSessionDebugSummary(),
+    })
+
     window.sessionStorage.removeItem(CHECKOUT_PAYMENT_ORDER_ID_KEY)
     window.sessionStorage.removeItem(CHECKOUT_CLAIM_TOKEN_KEY)
+    window.sessionStorage.removeItem(CHECKOUT_PAYMENT_URL_KEY)
     window.sessionStorage.removeItem(CHECKOUT_PHONE_KEY)
     window.sessionStorage.removeItem(CHECKOUT_EMAIL_KEY)
+    window.sessionStorage.removeItem(CHECKOUT_NAME_KEY)
+    window.sessionStorage.removeItem(CHECKOUT_GENDER_KEY)
     window.sessionStorage.removeItem(CHECKOUT_ACCOUNT_EXISTS_KEY)
+    window.sessionStorage.removeItem(CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY)
     window.sessionStorage.removeItem(CHECKOUT_SESSION_USER_KEY)
   }
 
   async function openAccountSetup(orderId: string) {
     const claimToken = getCheckoutClaimToken()
+    void logLocalCheckoutDebug('account_setup_open_start', {
+      orderId,
+      claimPresent: Boolean(claimToken),
+      storedSession: getStoredCheckoutSessionDebugSummary(),
+    })
 
     if (!orderId || !claimToken) {
+      void logLocalCheckoutDebug('account_setup_open_blocked_missing_claim', {
+        orderId,
+        claimPresent: Boolean(claimToken),
+        storedSession: getStoredCheckoutSessionDebugSummary(),
+      })
       setScreen('error')
       setPageError('Checkout session could not be verified. Please contact support with your payment id.')
       setResult({
@@ -2171,14 +2478,20 @@ export default function PaymentPage() {
       return
     }
 
+    const storedCheckoutSession = getStoredCheckoutSession()
+
     setPaymentOrderId(orderId)
     setAccountSetupStep('profile')
+    setAccountName((current) => current || storedCheckoutSession.name || '')
+    setAccountGender((current) => current || storedCheckoutSession.gender || '')
+    setAccountPassword('')
+    setAccountConfirmPassword('')
     setScreen('accountSetup')
     setCheckoutLoading(false)
-    setStatusNote('Complete account setup to activate access.')
+    setStatusNote('One more step left to activate your account.')
     setResult({
-      title: 'Payment confirmed',
-      message: 'Verify your phone and complete your profile to activate course access.',
+      title: 'One more step left',
+      message: 'Payment is confirmed. Verify your phone and set your account password to activate access.',
       tone: 'success',
     })
 
@@ -2189,12 +2502,22 @@ export default function PaymentPage() {
 
   async function startCheckoutOtp(orderId = paymentOrderId, claimToken = getCheckoutClaimToken()) {
     if (!orderId || !claimToken) {
+      void logLocalCheckoutDebug('checkout_otp_start_blocked_missing_claim', {
+        orderId,
+        claimPresent: Boolean(claimToken),
+        storedSession: getStoredCheckoutSessionDebugSummary(),
+      })
       setAccountError('Checkout session is missing. Please contact support with your payment id.')
       return
     }
 
     setAccountSetupLoading(true)
     setAccountError('')
+    void logLocalCheckoutDebug('checkout_otp_start_request', {
+      orderId,
+      claimPresent: Boolean(claimToken),
+      channel: 'sms',
+    })
 
     try {
       await apiFetch('/auth/checkout/otp/start', {
@@ -2208,7 +2531,15 @@ export default function PaymentPage() {
       })
       setAccountOtpStarted(true)
       setStatusNote('OTP sent for checkout verification.')
+      void logLocalCheckoutDebug('checkout_otp_start_success', {
+        orderId,
+      })
     } catch (error) {
+      void logLocalCheckoutDebug('checkout_otp_start_error', {
+        orderId,
+        message: getAccountSetupErrorMessage(error, 'Could not send OTP.'),
+        status: error instanceof PaymentApiError ? error.status : undefined,
+      })
       setAccountError(getAccountSetupErrorMessage(error, 'Could not send OTP. Please try again.'))
     } finally {
       setAccountSetupLoading(false)
@@ -2218,12 +2549,14 @@ export default function PaymentPage() {
   async function handleCompleteAccountSetup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const name = accountName.trim()
-    const age = Number(accountAge)
+    const storedCheckoutSession = getStoredCheckoutSession()
+    const name = (accountName || storedCheckoutSession.name).trim()
+    const gender = normalizeStoredSignupGender(accountGender || storedCheckoutSession.gender)
     const code = accountOtp.trim()
     const claimToken = getCheckoutClaimToken()
-    const storedCheckoutSession = getStoredCheckoutSession()
     const isExistingAccountCheckout = storedCheckoutSession.accountExists
+    const password = accountPassword
+    const confirmPassword = accountConfirmPassword
 
     if (!paymentOrderId || !claimToken) {
       setAccountError('Checkout session is missing. Please contact support with your payment id.')
@@ -2236,27 +2569,38 @@ export default function PaymentPage() {
     }
 
     if (!isExistingAccountCheckout && !name) {
-      setAccountError('Enter your name to continue.')
+      setAccountError('Your checkout profile is missing. Please reopen checkout and try again.')
       return
     }
 
-    if (!isExistingAccountCheckout && (!Number.isFinite(age) || age < 10 || age > 99)) {
-      setAccountError('Enter a valid age.')
+    if (!isExistingAccountCheckout && !gender) {
+      setAccountError('Your checkout gender selection is missing. Please reopen checkout and try again.')
       return
     }
 
-    if (!isExistingAccountCheckout && !accountGender) {
-      setAccountError('Choose your gender.')
+    const passwordError = !isExistingAccountCheckout ? validateAccountPassword(password) : ''
+
+    if (passwordError) {
+      setAccountError(passwordError)
       return
     }
 
-    if (!isExistingAccountCheckout && !accountTermsAccepted) {
-      setAccountError('Accept the terms and privacy policy to continue.')
+    if (!isExistingAccountCheckout && password !== confirmPassword) {
+      setAccountError('Passwords do not match.')
       return
     }
 
     setAccountSetupLoading(true)
     setAccountError('')
+    void logLocalCheckoutDebug('checkout_otp_verify_request', {
+      paymentOrderId,
+      claimPresent: Boolean(claimToken),
+      codePresent: Boolean(code),
+      passwordPresent: Boolean(password),
+      namePresent: Boolean(name),
+      gender,
+      isExistingAccountCheckout,
+    })
 
     try {
       const completed = await apiFetch<CheckoutOtpVerifyResponse>('/auth/checkout/otp/verify', {
@@ -2267,7 +2611,8 @@ export default function PaymentPage() {
           claimToken,
           code,
           name: isExistingAccountCheckout ? undefined : name,
-          gender: isExistingAccountCheckout ? undefined : accountGender,
+          gender: isExistingAccountCheckout ? undefined : gender,
+          password: isExistingAccountCheckout ? undefined : password,
           privacyPolicyVersion: privacyPolicyVersion || undefined,
         }),
       })
@@ -2288,29 +2633,44 @@ export default function PaymentPage() {
         apiFetch('/me/courses'),
       ])
 
-      if (isExistingAccountCheckout) {
-        setAuthMode('bearer')
-        setScreen('success')
-        setShowSuccessModal(false)
-        setResult({
-          title: 'Access unlocked',
-          message: 'Your account is verified and course access is active.',
-          tone: 'success',
-        })
-        setStatusNote('Account verified successfully.')
-        postMobileEvent('PAYMENT_SUCCESS', {
-          status: 'success',
-          orderId: paymentOrderId,
-        })
-        return
-      }
+      const emailVerificationRequired = isCheckoutEmailVerificationRequired(completed)
 
       setAuthMode('bearer')
-      setAccountSetupStep('course')
       setAccountOtp('')
       setAccountOtpStarted(false)
-      await loadCourseOptions('Choose your course to finish setup.')
+      setAccountPassword('')
+      setAccountConfirmPassword('')
+      setScreen('success')
+      setShowSuccessModal(false)
+      setResult({
+        title: 'Access unlocked',
+        message: getAccountActivationSuccessMessage(isExistingAccountCheckout, emailVerificationRequired),
+        tone: 'success',
+      })
+      setStatusNote('Account activated successfully.')
+      void logLocalCheckoutDebug('checkout_otp_verify_success', {
+        paymentOrderId,
+        accountReady: Boolean(completed.accountReady),
+        accessTokenPresent: Boolean(completed.accessToken),
+        refreshTokenPresent: Boolean(completed.refreshToken),
+        emailVerificationRequired,
+        subscriptionStatus: completed.subscription?.status || '',
+      })
+      postMobileEvent('AUTH_SUCCESS', {
+        accessToken: completed.accessToken,
+        refreshToken: completed.refreshToken,
+      })
+      postMobileEvent('PAYMENT_SUCCESS', {
+        status: 'success',
+        orderId: paymentOrderId,
+      })
     } catch (error) {
+      void logLocalCheckoutDebug('checkout_otp_verify_error', {
+        paymentOrderId,
+        message: getAccountSetupErrorMessage(error, 'Could not complete account setup.'),
+        status: error instanceof PaymentApiError ? error.status : undefined,
+        errorCode: getPaymentErrorCode(error),
+      })
       setAccountError(getAccountSetupErrorMessage(error, 'Could not complete account setup. Please try again.'))
     } finally {
       setAccountSetupLoading(false)
@@ -2525,7 +2885,10 @@ export default function PaymentPage() {
         screen === 'pending' ||
         !selectedPlan ||
         phone.trim().length < 10 ||
-        !billingDetails.email.trim()
+        !billingDetails.email.trim() ||
+        !checkoutName.trim() ||
+        !checkoutGender ||
+        !checkoutTermsAccepted
       )
     }
 
@@ -2542,26 +2905,27 @@ export default function PaymentPage() {
   function renderAccountSetup() {
     const storedCheckoutSession = getStoredCheckoutSession()
     const isExistingAccountCheckout = storedCheckoutSession.accountExists
+    const phoneLabel = formatStoredPhoneLabel(storedCheckoutSession.phoneE164)
 
     return (
       <div className="mx-auto flex min-h-[58vh] max-w-xl items-center">
         <form
           onSubmit={handleCompleteAccountSetup}
-          className="w-full rounded-3xl border border-purple-100 bg-white p-5 text-slate-950 shadow-[0_18px_48px_rgba(107,33,168,0.10)] sm:p-6"
+          className="w-full overflow-hidden rounded-[22px] border border-[#efe6fb] bg-white text-slate-950 shadow-[0_20px_54px_rgba(74,38,122,0.12)]"
         >
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b21a8]">
-            {isExistingAccountCheckout ? 'Verify account' : 'Complete account setup'}
-          </p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
-            {isExistingAccountCheckout ? 'Verify your account' : 'Activate your account'}
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            {isExistingAccountCheckout
-              ? `Enter the OTP sent to ${formatStoredPhoneLabel(storedCheckoutSession.phoneE164)} to unlock your paid access.`
-              : `Enter the OTP sent to ${formatStoredPhoneLabel(storedCheckoutSession.phoneE164)} and complete your profile.`}
-          </p>
+          <div className="bg-[linear-gradient(135deg,#fbf8ff_0%,#f0e8ff_100%)] px-5 py-5 sm:px-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6b21a8]">
+              Account activation
+            </p>
+            <h1 className="mt-2 text-2xl font-black leading-tight text-[#171021]">
+              One more step left
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-[#655a73]">
+              Payment is confirmed. Verify {phoneLabel} and {isExistingAccountCheckout ? 'unlock your paid access.' : 'set your account password.'}
+            </p>
+          </div>
 
-          <div className="mt-5">
+          <div className="space-y-4 p-5 sm:p-6">
             <InputField
               label="OTP code"
               value={accountOtp}
@@ -2572,104 +2936,65 @@ export default function PaymentPage() {
               inputMode="numeric"
               disabled={accountSetupLoading}
             />
-          </div>
 
-          {!isExistingAccountCheckout && (
-            <>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <InputField
-                    label="Full name"
-                    value={accountName}
-                    onChange={(value) => {
-                      setAccountName(value)
-                      setAccountError('')
-                    }}
-                    disabled={accountSetupLoading}
-                  />
-                </div>
-                <InputField
-                  label="Age"
-                  value={accountAge}
+            {!isExistingAccountCheckout && (
+              <div className="grid gap-3">
+                <PasswordInputField
+                  label="Password"
+                  placeholder="At least 8 characters"
+                  value={accountPassword}
                   onChange={(value) => {
-                    setAccountAge(value.replace(/\D/g, '').slice(0, 2))
+                    setAccountPassword(value)
                     setAccountError('')
                   }}
-                  inputMode="numeric"
                   disabled={accountSetupLoading}
+                  visible={accountPasswordVisible}
+                  onToggleVisible={() => setAccountPasswordVisible((current) => !current)}
                 />
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Gender</span>
-                  <select
-                    value={accountGender}
-                    onChange={(event) => {
-                      setAccountGender(event.target.value as AccountGender)
-                      setAccountError('')
-                    }}
-                    disabled={accountSetupLoading}
-                    className="h-[47px] w-full rounded-2xl border border-purple-100 bg-white px-3 text-sm text-slate-900 shadow-[0_8px_18px_rgba(107,33,168,0.05)] outline-none transition focus:border-[#6b21a8] disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    <option value="">Select</option>
-                    <option value="FEMALE">Female</option>
-                    <option value="MALE">Male</option>
-                    <option value="NON_BINARY">Non-binary</option>
-                    <option value="OTHER">Other</option>
-                    <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-                  </select>
-                </label>
+
+                <PasswordRequirementChecklist password={accountPassword} />
+
+                <PasswordInputField
+                  label="Confirm password"
+                  placeholder="Re-enter password"
+                  value={accountConfirmPassword}
+                  onChange={(value) => {
+                    setAccountConfirmPassword(value)
+                    setAccountError('')
+                  }}
+                  disabled={accountSetupLoading}
+                  visible={accountPasswordVisible}
+                  onToggleVisible={() => setAccountPasswordVisible((current) => !current)}
+                />
               </div>
-
-              <label className="mt-5 flex items-start gap-3 text-sm leading-5 text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={accountTermsAccepted}
-                  onChange={(event) => {
-                    setAccountTermsAccepted(event.target.checked)
-                    setAccountError('')
-                  }}
-                  disabled={accountSetupLoading}
-                  className="mt-0.5 h-4 w-4 rounded border-purple-200 text-[#6b21a8] focus:ring-[#6b21a8]"
-                />
-                <span>
-                  I accept the{' '}
-                  <a href="/terms-and-conditions" className="font-semibold text-[#6b21a8] hover:underline">
-                    Terms
-                  </a>{' '}
-                  and{' '}
-                  <a href="/privacy-policy" className="font-semibold text-[#6b21a8] hover:underline">
-                    Privacy Policy
-                  </a>
-                  .
-                </span>
-              </label>
-            </>
-          )}
-
-          <div className="mt-5 space-y-3">
-            {accountError && <MessageBanner tone="danger">{accountError}</MessageBanner>}
-            {!accountError && accountOtpStarted && (
-              <MessageBanner tone="success">OTP sent to the phone number used for checkout.</MessageBanner>
             )}
+
+            <div className="space-y-3">
+              {accountError && <MessageBanner tone="danger">{accountError}</MessageBanner>}
+              {!accountError && accountOtpStarted && (
+                <MessageBanner tone="success">OTP sent to the phone number used for checkout.</MessageBanner>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={accountSetupLoading}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[#6b21a8] px-5 py-3 text-sm font-black text-white shadow-[0_16px_30px_rgba(107,33,168,0.20)] transition hover:bg-[#581c87] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {accountSetupLoading
+                ? isExistingAccountCheckout ? 'Verifying account...' : 'Activating account...'
+                : isExistingAccountCheckout ? 'Verify and unlock access' : 'Activate account'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void startCheckoutOtp()}
+              disabled={accountSetupLoading}
+              className="w-full rounded-[14px] border border-purple-100 bg-white px-4 py-3 text-sm font-bold text-[#6b21a8] transition hover:border-[#6b21a8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {accountSetupLoading ? 'Please wait...' : 'Resend OTP'}
+            </button>
           </div>
-
-          <button
-            type="submit"
-            disabled={accountSetupLoading}
-            className="mt-5 inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#6b21a8] px-5 py-3 text-sm font-bold text-white shadow-[0_14px_28px_rgba(107,33,168,0.18)] transition hover:bg-[#581c87] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {accountSetupLoading
-              ? isExistingAccountCheckout ? 'Verifying account...' : 'Completing setup...'
-              : isExistingAccountCheckout ? 'Verify and unlock access' : 'Complete account setup'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void startCheckoutOtp()}
-            disabled={accountSetupLoading}
-            className="mt-3 w-full rounded-2xl border border-purple-100 bg-white px-4 py-3 text-sm font-semibold text-[#6b21a8] transition hover:border-[#6b21a8] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {accountSetupLoading ? 'Please wait...' : 'Resend OTP'}
-          </button>
         </form>
       </div>
     )
@@ -2976,19 +3301,51 @@ export default function PaymentPage() {
               />
 
               {showContactFields ? (
-                <InputField
-                  label="Mobile number"
-                  hint="+91"
-                  placeholder="10-digit number"
-                  value={phone}
-                  onChange={(value) => {
-                    setPhone(value.replace(/\D/g, '').slice(0, 10))
-                    setAuthError('')
-                    setBillingError('')
-                  }}
-                  inputMode="numeric"
-                  disabled={otpLoading || disabled}
-                />
+                <>
+                  <InputField
+                    label="Full name"
+                    placeholder="Your name"
+                    value={checkoutName}
+                    onChange={(value) => {
+                      setCheckoutName(value)
+                      setBillingError('')
+                    }}
+                    disabled={disabled}
+                  />
+
+                  <InputField
+                    label="Mobile number"
+                    hint="+91"
+                    placeholder="10-digit number"
+                    value={phone}
+                    onChange={(value) => {
+                      setPhone(value.replace(/\D/g, '').slice(0, 10))
+                      setAuthError('')
+                      setBillingError('')
+                    }}
+                    inputMode="numeric"
+                    disabled={otpLoading || disabled}
+                  />
+
+                  <InputField
+                    label="Email address"
+                    placeholder="you@email.com"
+                    value={billingDetails.email}
+                    onChange={(value) => updateBillingField('email', value)}
+                    inputMode="email"
+                    type="email"
+                    disabled={disabled}
+                  />
+
+                  <SignupGenderField
+                    disabled={disabled}
+                    value={checkoutGender}
+                    onChange={(value) => {
+                      setCheckoutGender(value)
+                      setBillingError('')
+                    }}
+                  />
+                </>
               ) : (
                 <SessionCustomerCard user={sessionUser} />
               )}
@@ -3007,17 +3364,33 @@ export default function PaymentPage() {
                 />
               )}
 
-              {showContactFields && (
-                <InputField
-                  label="Email address"
-                  placeholder="you@email.com"
-                  value={billingDetails.email}
-                  onChange={(value) => updateBillingField('email', value)}
-                  inputMode="email"
-                  disabled={disabled}
-                />
-              )}
             </div>
+
+            {showContactFields && (
+              <label className="mt-3 flex items-start gap-3 rounded-[14px] border border-[#eee7f7] bg-[#fbfaff] px-3 py-2.5 text-xs leading-5 text-[#62576f]">
+                <input
+                  type="checkbox"
+                  checked={checkoutTermsAccepted}
+                  onChange={(event) => {
+                    setCheckoutTermsAccepted(event.target.checked)
+                    setBillingError('')
+                  }}
+                  disabled={disabled}
+                  className="mt-0.5 h-4 w-4 rounded border-purple-200 text-[#6b21a8] focus:ring-[#6b21a8]"
+                />
+                <span>
+                  I accept the{' '}
+                  <a href="/terms-and-conditions" className="font-bold text-[#6b21a8] hover:underline">
+                    Terms
+                  </a>{' '}
+                  and{' '}
+                  <a href="/privacy-policy" className="font-bold text-[#6b21a8] hover:underline">
+                    Privacy Policy
+                  </a>
+                  .
+                </span>
+              </label>
+            )}
 
             {checkoutPricing && selectedPlan && (
               <CouponSection
@@ -3159,15 +3532,15 @@ export default function PaymentPage() {
     )
 
     return (
-      <section className="mx-auto grid max-w-5xl items-center gap-5 py-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:py-10">
-        <div className="rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_48px_rgba(107,33,168,0.10)] sm:p-8">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f4eeff] text-[#6b21a8]">
-            <CheckIcon className="h-8 w-8" />
+      <section className="mx-auto grid w-full max-w-5xl items-start gap-4 py-5 sm:gap-5 sm:py-7 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-8">
+        <div className="min-w-0 rounded-[22px] border border-purple-100 bg-white p-5 shadow-[0_18px_48px_rgba(107,33,168,0.10)] sm:p-7">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#f4eeff] text-[#6b21a8] sm:h-16 sm:w-16">
+            <CheckIcon className="h-7 w-7 sm:h-8 sm:w-8" />
           </div>
           <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b21a8]">
             {isTrialSuccess ? 'Trial active' : 'Access ready'}
           </p>
-          <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] text-slate-950 sm:text-5xl">
+          <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-950 sm:text-[44px]">
             {isTrialSuccess ? 'Your 24-hour trial is active.' : 'Your access is ready.'}
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-500">
@@ -3181,11 +3554,11 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        <aside className="rounded-3xl bg-[#6b21a8] p-6 text-white shadow-[0_24px_56px_rgba(107,33,168,0.22)]">
+        <aside className="min-w-0 rounded-[22px] bg-[#6b21a8] p-5 text-white shadow-[0_24px_56px_rgba(107,33,168,0.22)] sm:p-6">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#d3b8ff]">
             {isTrialSuccess ? 'Trial access' : 'Subscription'}
           </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-[-0.04em]">{courseTitle}</h2>
+          <h2 className="mt-3 text-2xl font-bold leading-tight sm:text-3xl">{courseTitle}</h2>
           <div className="mt-6 space-y-3 border-y border-white/14 py-5">
             <PlanFeature>{isTrialSuccess ? '24-hour trial access is active' : 'Course access is active'}</PlanFeature>
             <PlanFeature>Mobile app access is enabled</PlanFeature>
@@ -3377,6 +3750,20 @@ export default function PaymentPage() {
     return null
   }
 
+  const isSuccessScreen = screen === 'success'
+  const pageShellClassName = cn(
+    'mx-auto w-full px-4 pb-4',
+    isSuccessScreen ? 'max-w-5xl pt-5 sm:px-6 sm:pt-8 lg:pb-8' : 'max-w-[430px] pt-3'
+  )
+  const pageHeaderClassName = cn(
+    'mt-2',
+    isSuccessScreen && 'sm:mt-4'
+  )
+  const pageTitleClassName = cn(
+    'mt-1 font-black leading-none text-[#171021]',
+    isSuccessScreen ? 'text-[34px] sm:text-[44px]' : 'text-[28px]'
+  )
+
   return (
     <>
       <Head>
@@ -3396,8 +3783,8 @@ export default function PaymentPage() {
       )}
 
       <div className="min-h-screen bg-white text-[#211536]">
-        <div className="mx-auto w-full max-w-[430px] px-4 pb-4 pt-3">
-            <div className="flex items-center justify-between gap-3">
+        <div className={pageShellClassName}>
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={handleBack}
@@ -3406,21 +3793,13 @@ export default function PaymentPage() {
                 <ChevronLeftIcon className="h-3.5 w-3.5" />
                 Back
               </button>
-
-              <div className="min-w-0 rounded-full bg-[#f0e3ff] px-3 py-1 text-[11px] font-black text-[#8441ee]">
-                <span className="block truncate">
-                  {screen === 'trial'
-                    ? '24h Trial'
-                    : selectedPlan ? `${formatPlanDuration(selectedPlan.durationMonths)} Plan` : 'Selected Plan'}
-                </span>
-              </div>
             </div>
 
-            <div className="mt-2">
+            <div className={pageHeaderClassName}>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#08a76b]">
                 Secure checkout
               </p>
-              <h1 className="mt-1 text-[28px] font-black leading-none tracking-[-0.04em] text-[#171021]">
+              <h1 className={pageTitleClassName}>
                 {screen === 'trial' ? 'Trial' : 'Payment'}
               </h1>
             </div>
@@ -3693,6 +4072,50 @@ function CourseSelectorField({
         <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a90ae]" />
       </div>
     </label>
+  )
+}
+
+function SignupGenderField({
+  disabled,
+  onChange,
+  value,
+}: {
+  disabled?: boolean
+  onChange: (value: SignupGender) => void
+  value: SignupGender
+}) {
+  const options: Array<{ label: string; value: SignupGender }> = [
+    { label: 'Female', value: 'FEMALE' },
+    { label: 'Male', value: 'MALE' },
+    { label: 'Prefer not to say', value: 'PREFER_NOT_TO_SAY' },
+  ]
+
+  return (
+    <div>
+      <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">Gender</span>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((option) => {
+          const active = value === option.value
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              disabled={disabled}
+              className={cn(
+                'min-h-10 rounded-[14px] border px-2 py-2 text-center text-[11px] font-black leading-4 transition disabled:cursor-not-allowed disabled:opacity-60',
+                active
+                  ? 'border-[#7b2fee] bg-[#f4eeff] text-[#5b21b6]'
+                  : 'border-[#e8e2ee] bg-white text-[#675f73] hover:border-[#cdb7f8]'
+              )}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -4001,6 +4424,7 @@ function InputField({
   label,
   onChange,
   placeholder,
+  type = 'text',
   value,
 }: {
   disabled?: boolean
@@ -4009,6 +4433,7 @@ function InputField({
   label: string
   onChange: (value: string) => void
   placeholder?: string
+  type?: React.HTMLInputTypeAttribute
   value: string
 }) {
   return (
@@ -4017,7 +4442,7 @@ function InputField({
       <div className="flex h-10 items-center rounded-[14px] border border-[#e8e2ee] bg-white px-3 transition focus-within:border-[#8b3fea] disabled:opacity-70">
         {hint && <span className="mr-3 border-r border-[#eee8f4] pr-3 text-sm font-semibold text-[#9c94a9]">{hint}</span>}
         <input
-          type="text"
+          type={type}
           inputMode={inputMode}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -4027,6 +4452,74 @@ function InputField({
         />
       </div>
     </label>
+  )
+}
+
+function PasswordInputField({
+  disabled,
+  label,
+  onChange,
+  onToggleVisible,
+  placeholder,
+  value,
+  visible,
+}: {
+  disabled?: boolean
+  label: string
+  onChange: (value: string) => void
+  onToggleVisible: () => void
+  placeholder?: string
+  value: string
+  visible: boolean
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-[#4f465e]">{label}</span>
+      <div className="flex h-10 items-center rounded-[14px] border border-[#e8e2ee] bg-white px-3 transition focus-within:border-[#8b3fea] disabled:opacity-70">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder || undefined}
+          disabled={disabled}
+          className="w-full min-w-0 border-0 bg-transparent px-0 py-2 text-sm font-medium text-[#211536] outline-none placeholder:text-[#c9c2d3] focus:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
+        />
+        <button
+          type="button"
+          onClick={onToggleVisible}
+          disabled={disabled}
+          className="ml-3 shrink-0 rounded-full px-2 py-1 text-[11px] font-black text-[#6b21a8] transition hover:bg-[#f4eeff] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {visible ? 'Hide' : 'View'}
+        </button>
+      </div>
+    </label>
+  )
+}
+
+function PasswordRequirementChecklist({ password }: { password: string }) {
+  return (
+    <div className="grid gap-1.5 rounded-[14px] border border-[#eee7f7] bg-[#fbfaff] px-3 py-2.5">
+      {getPasswordRequirementChecks(password).map((requirement) => (
+        <div
+          key={requirement.key}
+          className={cn(
+            'flex items-center gap-2 text-xs font-semibold leading-5 transition',
+            requirement.met ? 'text-[#047857]' : 'text-[#8a8098]'
+          )}
+        >
+          <span
+            className={cn(
+              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition',
+              requirement.met ? 'border-[#34d399] bg-[#d1fae5] text-[#047857]' : 'border-[#d8cfE5] bg-white text-transparent'
+            )}
+          >
+            <CheckIcon className="h-2.5 w-2.5" />
+          </span>
+          <span>{requirement.label}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -4686,6 +5179,57 @@ function maskPhone(phoneE164: string) {
   return phoneE164.replace(/^(\+91)(\d{2})\d{4}(\d{4})$/, '$1 $2****$3')
 }
 
+function getUrlHost(value: string) {
+  if (!value) {
+    return ''
+  }
+
+  try {
+    return new URL(value).host
+  } catch {
+    return '[invalid-url]'
+  }
+}
+
+function normalizeStoredSignupGender(value: string): SignupGender {
+  if (value === 'FEMALE' || value === 'MALE' || value === 'PREFER_NOT_TO_SAY') {
+    return value
+  }
+
+  return ''
+}
+
+function isCheckoutEmailVerificationRequired(response: CheckoutOtpVerifyResponse) {
+  const rawResponse = response as CheckoutOtpVerifyResponse & {
+    user?: {
+      emailVerificationRequired?: boolean
+      emailVerified?: boolean
+    }
+    profile?: {
+      emailVerificationRequired?: boolean
+      emailVerified?: boolean
+    }
+  }
+
+  return Boolean(
+    rawResponse.emailVerificationRequired ||
+    rawResponse.user?.emailVerificationRequired ||
+    rawResponse.profile?.emailVerificationRequired ||
+    rawResponse.user?.emailVerified === false ||
+    rawResponse.profile?.emailVerified === false
+  )
+}
+
+function getAccountActivationSuccessMessage(isExistingAccountCheckout: boolean, emailVerificationRequired: boolean) {
+  if (emailVerificationRequired) {
+    return 'Your account is active and course access is ready. Please verify your email when prompted.'
+  }
+
+  return isExistingAccountCheckout
+    ? 'Your account is verified and course access is active.'
+    : 'Your account is active and course access is ready.'
+}
+
 function getAccountSetupErrorMessage(error: unknown, fallback: string) {
   const code = getPaymentErrorCode(error)
 
@@ -4728,12 +5272,57 @@ function validateBillingDetails(details: BillingDetails, phone: string) {
   return ''
 }
 
+function validateAccountPassword(password: string) {
+  const missingRequirement = getPasswordRequirementChecks(password).find((requirement) => !requirement.met)
+
+  if (missingRequirement) {
+    return `Password must include ${missingRequirement.errorText}.`
+  }
+
+  return ''
+}
+
+function getPasswordRequirementChecks(password: string) {
+  return [
+    {
+      key: 'length',
+      label: 'At least 8 characters',
+      errorText: 'at least 8 characters',
+      met: password.length >= 8,
+    },
+    {
+      key: 'uppercase',
+      label: 'One uppercase letter',
+      errorText: 'one uppercase letter',
+      met: /[A-Z]/.test(password),
+    },
+    {
+      key: 'lowercase',
+      label: 'One lowercase letter',
+      errorText: 'one lowercase letter',
+      met: /[a-z]/.test(password),
+    },
+    {
+      key: 'number',
+      label: 'One number',
+      errorText: 'one number',
+      met: /[0-9]/.test(password),
+    },
+    {
+      key: 'special',
+      label: 'One special character',
+      errorText: 'one special character',
+      met: /[^A-Za-z0-9]/.test(password),
+    },
+  ]
+}
+
 function formatStoredPhoneLabel(phoneE164: string) {
   if (!phoneE164) {
     return 'your checkout phone number'
   }
 
-  return phoneE164.replace(/^(\+91)(\d{2})\d{4}(\d{4})$/, '$1 $2****$3')
+  return phoneE164.replace(/^(\+91)(\d{10})$/, '$1 $2')
 }
 
 function getDirectPaymentLink(order: BillingOrderResponse) {
