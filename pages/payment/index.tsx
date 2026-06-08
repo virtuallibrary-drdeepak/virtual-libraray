@@ -119,9 +119,11 @@ const CHECKOUT_GENDER_KEY = 'checkoutGender'
 const CHECKOUT_ACCOUNT_EXISTS_KEY = 'checkoutAccountExists'
 const CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY = 'checkoutAccountSetupRequired'
 const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
+const CHECKOUT_RETURN_URL_KEY = 'checkoutReturnUrl'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
 const MOBILE_CHECKOUT_CONTEXT_KEY = 'vl_mobile_checkout_context'
 const MOBILE_CHECKOUT_CONTEXT_TTL_MS = 30 * 60 * 1000
+const MOBILE_CHECKOUT_DEFAULT_RETURN_URL = 'virtuallibrary://subscribe/callback'
 const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
 const APP_STORE_HREF = 'https://apps.apple.com/in/app/virtual-library/id6761748966'
 const PAYMENT_PLAN_FEATURES = [
@@ -167,6 +169,16 @@ const MOBILE_CONTEXT_QUERY_KEYS = [
   'from',
   'platform',
   'source',
+]
+const MOBILE_RETURN_URL_QUERY_KEYS = [
+  'appCallbackUrl',
+  'callback',
+  'callbackUrl',
+  'callback_url',
+  'redirectUri',
+  'redirect_uri',
+  'returnUrl',
+  'return_url',
 ]
 const DEFAULT_PRIVACY_POLICY_VERSION = process.env.NEXT_PUBLIC_PRIVACY_POLICY_VERSION || ''
 const DEFAULT_PUBLIC_COURSE_SLUG = 'neet-pg'
@@ -258,6 +270,14 @@ export default function PaymentPage() {
   const shouldUseV2WebFallback = checkoutSource === 'v2-neet-pg'
   const shouldLoadCheckoutScript = router.isReady && isLegacyCheckoutFlow
   const isSessionPaymentLinkCheckout = isPrimaryPaymentLinksFlow && Boolean(sessionUser)
+  const isMobileHandoffCheckout =
+    !isLegacyCheckoutFlow &&
+    isMobileCheckout &&
+    Boolean(sessionUser)
+  const isAuthenticatedPaymentLinkCheckout =
+    isPrimaryPaymentLinksFlow &&
+    Boolean(sessionUser) &&
+    !isLegacyCheckoutFlow
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => plan.planId === selectedPlanId) || null,
@@ -648,6 +668,7 @@ export default function PaymentPage() {
     })
 
     if (paymentStatusFromQuery) {
+      await loadSessionUser()
       await handlePaymentLinkResult(paymentStatusFromQuery)
       return
     }
@@ -1145,6 +1166,7 @@ export default function PaymentPage() {
         skipAuth: isPrimaryPaymentLinksFlow && !sessionUser,
         body: JSON.stringify({
           planId: requestPlanId,
+          ...(isMobileHandoffCheckout || isAuthenticatedPaymentLinkCheckout ? { courseId: selectedCourse?.courseId } : {}),
           ...(guestQuotePayload ? getPaymentLinkCustomerPayload(guestQuotePayload) : {}),
           couponCode: nextCouponCode,
         }),
@@ -1469,6 +1491,10 @@ export default function PaymentPage() {
   }
 
   function getCouponPreviewEndpoint() {
+    if (isMobileHandoffCheckout || isAuthenticatedPaymentLinkCheckout) {
+      return '/billing/payment-links/quote'
+    }
+
     if (isPrimaryPaymentLinksFlow && !sessionUser) {
       return '/billing/guest/payment-links/quote'
     }
@@ -1533,6 +1559,11 @@ export default function PaymentPage() {
 
     if (isPrimaryPaymentLinksFlow && !sessionUser) {
       await createPaymentLink()
+      return
+    }
+
+    if (isMobileHandoffCheckout || isAuthenticatedPaymentLinkCheckout) {
+      await createAuthenticatedPaymentLink()
       return
     }
 
@@ -1708,6 +1739,7 @@ export default function PaymentPage() {
           created.checkout.accountSetupRequired ? '1' : '0'
         )
         window.sessionStorage.setItem(CHECKOUT_SESSION_USER_KEY, sessionUser ? '1' : '0')
+        window.sessionStorage.removeItem(CHECKOUT_RETURN_URL_KEY)
       }
 
       await logLocalCheckoutDebug('guest_payment_link_created_and_stored', {
@@ -1758,6 +1790,126 @@ export default function PaymentPage() {
 
       if (errorCode === 'PHONE_EMAIL_MISMATCH') {
         setPageError('This phone number is linked to another email. Use the existing email for this phone.')
+        setCheckoutLoading(false)
+        return
+      }
+
+      if (errorCode?.startsWith('COUPON_')) {
+        setCouponError(getErrorMessage(error, 'Coupon is not valid for this plan.'))
+        setCheckoutLoading(false)
+        return
+      }
+
+      setPageError(
+        errorCode === 'PAYMENT_LINK_CREATE_FAILED'
+          ? 'Could not create the Razorpay payment link. Please retry.'
+          : getErrorMessage(error, 'Could not create the payment link. Please try again.')
+      )
+      setCheckoutLoading(false)
+      setStatusNote('Payment link creation failed.')
+    }
+  }
+
+  async function createAuthenticatedPaymentLink() {
+    if (!selectedPlan) {
+      setPageError('Select a plan before continuing.')
+      return
+    }
+
+    if (!ensureAuthorization('Sign in with your phone number to continue to payment.')) {
+      return
+    }
+
+    setCheckoutLoading(true)
+    setPageError('')
+    setAuthError('')
+    setBillingError('')
+    setResult(null)
+    setStatusTimedOut(false)
+    setStatusNote('Creating your Razorpay payment link...')
+    const returnUrl = getCheckoutReturnUrlForCreate()
+    const debugEventPrefix = isMobileHandoffCheckout ? 'mobile_handoff' : 'authenticated_payment_link'
+
+    void logLocalCheckoutDebug(`${debugEventPrefix}_payment_link_create_start`, {
+      planId: selectedPlan.planId,
+      courseId: selectedCourse?.courseId || '',
+      couponPresent: Boolean(activeCouponCode),
+      authMode,
+      isMobileCheckout,
+      sessionUserPresent: Boolean(sessionUser),
+      returnUrlPresent: Boolean(returnUrl),
+    })
+
+    try {
+      const created = await apiFetch<PaymentLinkCreateResponse>('/billing/payment-links', {
+        method: 'POST',
+        body: JSON.stringify({
+          planId: selectedPlan.planId,
+          courseId: selectedCourse?.courseId,
+          couponCode: getCouponCodeForSubmit(activeCouponCode),
+        }),
+      })
+      const paymentUrl = getPaymentLinkUrl(created)
+
+      if (!paymentUrl) {
+        setPageError('Backend did not return a Razorpay payment link. Please try again.')
+        setCheckoutLoading(false)
+        return
+      }
+
+      if (!created.order?.id) {
+        setPageError('Checkout session is incomplete. Please retry payment from pricing.')
+        setCheckoutLoading(false)
+        return
+      }
+
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
+        window.sessionStorage.removeItem(CHECKOUT_CLAIM_TOKEN_KEY)
+        window.sessionStorage.setItem(CHECKOUT_PAYMENT_URL_KEY, paymentUrl)
+        window.sessionStorage.setItem(CHECKOUT_SESSION_USER_KEY, '1')
+        if (returnUrl) {
+          window.sessionStorage.setItem(CHECKOUT_RETURN_URL_KEY, returnUrl)
+        } else {
+          window.sessionStorage.removeItem(CHECKOUT_RETURN_URL_KEY)
+        }
+      }
+
+      await logLocalCheckoutDebug(`${debugEventPrefix}_payment_link_created_and_stored`, {
+        orderId: created.order?.id || '',
+        claimPresent: Boolean(created.checkout?.claimToken),
+        paymentHost: getUrlHost(paymentUrl),
+        returnUrlPresent: Boolean(returnUrl),
+        storageAfterCreate: getStoredCheckoutSessionDebugSummary(),
+      })
+
+      postMobileEvent('OPEN_PAYMENT_LINK', {
+        planId: selectedPlan.planId,
+        orderId: created.order?.id,
+        paymentLink: paymentUrl,
+      })
+      window.location.assign(paymentUrl)
+    } catch (error) {
+      const errorCode = getPaymentErrorCode(error)
+      void logLocalCheckoutDebug(`${debugEventPrefix}_payment_link_create_error`, {
+        errorCode,
+        message: getErrorMessage(error, 'Could not create the payment link.'),
+        status: error instanceof PaymentApiError ? error.status : undefined,
+      })
+
+      if (error instanceof PaymentApiError && error.status === 401) {
+        tokenStore.clear()
+        setSessionUser(null)
+        openOtpScreen('Sign in again to continue to payment.')
+        setCheckoutLoading(false)
+        return
+      }
+
+      if (error instanceof PaymentApiError && error.status === 404) {
+        setPageError('Selected plan is no longer available. Please return to pricing and choose again.')
+        if (planIdFromQuery) {
+          void loadPublicPlanForPayment(planIdFromQuery)
+        }
         setCheckoutLoading(false)
         return
       }
@@ -2045,6 +2197,26 @@ export default function PaymentPage() {
       return
     }
 
+    if (storedCheckoutSession.sessionUser && (normalizedStatus === 'success' || normalizedStatus === 'captured')) {
+      setScreen('pending')
+      setResult({
+        title: 'Checking payment',
+        message: 'Payment succeeded. We are activating your access.',
+        tone: 'warning',
+        returnUrl: getCheckoutReturnUrlForStatus(),
+      })
+
+      if (nextPaymentOrderId) {
+        const resolved = await checkPaymentLinkStatus(nextPaymentOrderId, true)
+
+        if (!resolved) {
+          startPaymentLinkStatusPoll(nextPaymentOrderId)
+        }
+
+        return
+      }
+    }
+
     if (normalizedStatus === 'account_setup_required') {
       await openAccountSetup(nextPaymentOrderId)
       return
@@ -2055,26 +2227,33 @@ export default function PaymentPage() {
         apiFetch('/me/courses'),
         apiFetch('/me'),
       ])
+      const returnUrl = getCheckoutReturnUrlForStatus()
       if (storedCheckoutSession.sessionUser) {
         clearStoredCheckoutSession()
       }
 
       setScreen('success')
-      setShowSuccessModal(true)
+      setShowSuccessModal(Boolean(returnUrl))
       setResult({
         title: 'Access unlocked',
         message: 'Payment confirmed successfully. Your course access is being refreshed.',
         tone: 'success',
+        returnUrl,
       })
       setStatusNote('Payment completed successfully.')
       postMobileEvent('PAYMENT_SUCCESS', {
         status: 'success',
         orderId: nextPaymentOrderId,
+        returnUrl,
+        redirectUrl: getReturnTarget(returnUrl, 'success'),
       })
+      scheduleReturnToApp(returnUrl, 'success')
       return
     }
 
     if (normalizedStatus === 'pending') {
+      const returnUrl = getCheckoutReturnUrlForStatus()
+
       setScreen('pending')
       setResult({
         title: 'Payment is being processed',
@@ -2082,12 +2261,14 @@ export default function PaymentPage() {
           ? 'Razorpay has returned a pending status. We are checking for final confirmation.'
           : 'Razorpay has returned a pending status. Use refresh after a moment if access is not active.',
         tone: 'warning',
+        returnUrl,
       })
       setStatusNote('Waiting for final confirmation...')
 
       if (nextPaymentOrderId) {
         startPaymentLinkStatusPoll(nextPaymentOrderId)
       }
+      scheduleReturnToApp(returnUrl, 'pending')
       return
     }
 
@@ -2109,17 +2290,23 @@ export default function PaymentPage() {
       return
     }
 
+    const returnUrl = getCheckoutReturnUrlForStatus()
+
     setScreen('failed')
     setResult({
       title: 'Payment failed',
       message: 'Razorpay could not complete this payment. You can return to pricing and try again.',
       tone: 'danger',
+      returnUrl,
     })
     setStatusNote('Payment failed.')
     postMobileEvent('PAYMENT_FAILED', {
       status: 'failed',
       orderId: nextPaymentOrderId,
+      returnUrl,
+      redirectUrl: getReturnTarget(returnUrl, 'failed'),
     })
+    scheduleReturnToApp(returnUrl, 'failed')
   }
 
   function startPaymentLinkStatusPoll(orderId: string) {
@@ -2161,8 +2348,22 @@ export default function PaymentPage() {
       const storedCheckoutSession = getStoredCheckoutSession()
       const claimToken = getCheckoutClaimToken()
       const isStoredSessionCheckout = storedCheckoutSession.sessionUser
-      const canCheckAuthenticatedStatus =
+      let canCheckAuthenticatedStatus =
         isStoredSessionCheckout || Boolean(tokenStore.getAccessToken()) || authMode === 'cookie'
+
+      if (!claimToken && !canCheckAuthenticatedStatus && orderId) {
+        const loadedSessionUser = await loadSessionUser()
+
+        canCheckAuthenticatedStatus = Boolean(loadedSessionUser) || Boolean(tokenStore.getAccessToken())
+        void logLocalCheckoutDebug('payment_link_status_auth_probe', {
+          orderId,
+          authMode,
+          loadedSessionUserPresent: Boolean(loadedSessionUser),
+          canCheckAuthenticatedStatus,
+          storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
+        })
+      }
+
       void logLocalCheckoutDebug('payment_link_status_check_start', {
         orderId,
         manual,
@@ -2205,6 +2406,7 @@ export default function PaymentPage() {
         (normalizedOrderStatus === 'ACCOUNT_SETUP_REQUIRED' || status.accountSetupRequired || captured)
       const completed = status.accessGranted || normalizedOrderStatus === 'COMPLETED' || (!isGuestCheckout && captured)
       const failed = normalizedOrderStatus === 'FAILED' || normalizedPaymentStatus === 'FAILED'
+      const returnUrl = getCheckoutReturnUrlForStatus(status.returnUrl)
       void logLocalCheckoutDebug('payment_link_status_response', {
         orderId,
         status: status.status || '',
@@ -2216,6 +2418,7 @@ export default function PaymentPage() {
         failed,
         isGuestCheckout,
         providerPaymentIdPresent: Boolean(status.order?.providerPaymentId),
+        returnUrlPresent: Boolean(returnUrl),
       })
 
       if (needsAccountSetup) {
@@ -2243,18 +2446,22 @@ export default function PaymentPage() {
         }
 
         setScreen('success')
-        setShowSuccessModal(true)
+        setShowSuccessModal(Boolean(returnUrl))
         setResult({
           title: 'Access unlocked',
           message: 'Payment confirmed successfully. Your course access is active.',
           tone: 'success',
+          returnUrl,
         })
         setStatusNote('Payment completed successfully.')
         postMobileEvent('PAYMENT_SUCCESS', {
           status: 'success',
           orderId,
           providerPaymentId: status.order?.providerPaymentId,
+          returnUrl,
+          redirectUrl: getReturnTarget(returnUrl, 'success'),
         })
+        scheduleReturnToApp(returnUrl, 'success')
         return true
       }
 
@@ -2269,12 +2476,16 @@ export default function PaymentPage() {
           title: 'Payment failed',
           message: status.message || 'Razorpay could not complete this payment.',
           tone: 'danger',
+          returnUrl,
         })
         setStatusNote('Payment failed.')
         postMobileEvent('PAYMENT_FAILED', {
           status: 'failed',
           orderId,
+          returnUrl,
+          redirectUrl: getReturnTarget(returnUrl, 'failed'),
         })
+        scheduleReturnToApp(returnUrl, 'failed')
         return true
       }
 
@@ -2283,7 +2494,9 @@ export default function PaymentPage() {
           title: 'Payment still pending',
           message: status.message || 'Final confirmation is still in progress. Please check again shortly.',
           tone: 'warning',
+          returnUrl,
         })
+        scheduleReturnToApp(returnUrl, 'pending')
       }
 
       return false
@@ -2308,6 +2521,46 @@ export default function PaymentPage() {
     }
 
     return window.sessionStorage.getItem(CHECKOUT_CLAIM_TOKEN_KEY) || ''
+  }
+
+  function getCheckoutReturnUrlFromQuery() {
+    return getFirstQueryValue(router.query, MOBILE_RETURN_URL_QUERY_KEYS)
+  }
+
+  function getCheckoutReturnUrlForCreate() {
+    const returnUrlFromQuery = getCheckoutReturnUrlFromQuery()
+
+    if (returnUrlFromQuery) {
+      return returnUrlFromQuery
+    }
+
+    const storedReturnUrl = getStoredCheckoutSession().returnUrl
+
+    if (storedReturnUrl) {
+      return storedReturnUrl
+    }
+
+    return isMobileHandoffCheckout ? MOBILE_CHECKOUT_DEFAULT_RETURN_URL : ''
+  }
+
+  function getCheckoutReturnUrlForStatus(statusReturnUrl?: string) {
+    if (statusReturnUrl) {
+      return statusReturnUrl
+    }
+
+    const storedCheckoutSession = getStoredCheckoutSession()
+
+    if (storedCheckoutSession.returnUrl) {
+      return storedCheckoutSession.returnUrl
+    }
+
+    const returnUrlFromQuery = getCheckoutReturnUrlFromQuery()
+
+    if (returnUrlFromQuery) {
+      return returnUrlFromQuery
+    }
+
+    return storedCheckoutSession.sessionUser && isMobileCheckout ? MOBILE_CHECKOUT_DEFAULT_RETURN_URL : ''
   }
 
   async function logLocalCheckoutDebug(event: string, details: Record<string, any> = {}) {
@@ -2380,6 +2633,7 @@ export default function PaymentPage() {
       orderId: Boolean(window.sessionStorage.getItem(CHECKOUT_PAYMENT_ORDER_ID_KEY)),
       paymentUrl: Boolean(window.sessionStorage.getItem(CHECKOUT_PAYMENT_URL_KEY)),
       phone: Boolean(window.sessionStorage.getItem(CHECKOUT_PHONE_KEY)),
+      returnUrl: Boolean(window.sessionStorage.getItem(CHECKOUT_RETURN_URL_KEY)),
       sessionUser: Boolean(window.sessionStorage.getItem(CHECKOUT_SESSION_USER_KEY)),
     }
   }
@@ -2395,6 +2649,7 @@ export default function PaymentPage() {
       orderId: session.orderId,
       paymentHost: getUrlHost(session.paymentUrl),
       phoneMasked: maskPhone(session.phoneE164),
+      returnUrlPresent: Boolean(session.returnUrl),
       sessionUser: session.sessionUser,
     }
   }
@@ -2411,6 +2666,7 @@ export default function PaymentPage() {
         gender: '' as SignupGender,
         accountExists: false,
         accountSetupRequired: false,
+        returnUrl: '',
         sessionUser: false,
       }
     }
@@ -2425,6 +2681,7 @@ export default function PaymentPage() {
       gender: normalizeStoredSignupGender(window.sessionStorage.getItem(CHECKOUT_GENDER_KEY) || ''),
       accountExists: window.sessionStorage.getItem(CHECKOUT_ACCOUNT_EXISTS_KEY) === '1',
       accountSetupRequired: window.sessionStorage.getItem(CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY) === '1',
+      returnUrl: window.sessionStorage.getItem(CHECKOUT_RETURN_URL_KEY) || '',
       sessionUser: window.sessionStorage.getItem(CHECKOUT_SESSION_USER_KEY) === '1',
     }
   }
@@ -2448,6 +2705,7 @@ export default function PaymentPage() {
     window.sessionStorage.removeItem(CHECKOUT_ACCOUNT_EXISTS_KEY)
     window.sessionStorage.removeItem(CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY)
     window.sessionStorage.removeItem(CHECKOUT_SESSION_USER_KEY)
+    window.sessionStorage.removeItem(CHECKOUT_RETURN_URL_KEY)
   }
 
   async function openAccountSetup(orderId: string) {
@@ -2801,6 +3059,7 @@ export default function PaymentPage() {
     let disabled = false
     let onClick: (() => void) | undefined = undefined
     let showArrow = false
+    const shouldWaitForRazorpay = !isPrimaryPaymentLinksFlow && !isMobileHandoffCheckout
 
     if (screen === 'processing') {
       label = 'Verifying payment...'
@@ -2811,7 +3070,7 @@ export default function PaymentPage() {
       onClick = result?.returnUrl ? () => handleReturnToApp('pending') : undefined
     } else if (screen === 'failed') {
       label = checkoutPricing ? `Retry payment ${formatCurrency(checkoutPricing.finalAmountPaise, checkoutPricing.currency)}` : 'Retry payment'
-      disabled = checkoutLoading || !razorpayReady
+      disabled = checkoutLoading || (shouldWaitForRazorpay && !razorpayReady)
       onClick = handlePayNow
       showArrow = true
     } else {
@@ -2820,7 +3079,7 @@ export default function PaymentPage() {
         : checkoutPricing
           ? `Continue to pay ${formatCurrency(checkoutPricing.finalAmountPaise, checkoutPricing.currency)}`
           : 'Continue to pay'
-      disabled = checkoutLoading || !razorpayReady || !selectedPlan || !canRetryCheckout
+      disabled = checkoutLoading || (shouldWaitForRazorpay && !razorpayReady) || !selectedPlan || !canRetryCheckout
       onClick = handlePayNow
       showArrow = true
     }
@@ -2897,7 +3156,7 @@ export default function PaymentPage() {
       screen === 'processing' ||
       screen === 'pending' ||
       !selectedPlan ||
-      (!isPrimaryPaymentLinksFlow && !razorpayReady) ||
+      (!isPrimaryPaymentLinksFlow && !isMobileHandoffCheckout && !razorpayReady) ||
       (paymentPhoneOtpRequired && otp.trim().length < 4)
     )
   }

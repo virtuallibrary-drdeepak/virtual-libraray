@@ -14,6 +14,8 @@ const CHECKOUT_DEBUG_PATHS = [
   'billing/guest/payment-links/quote',
   'billing/guest/payment-links/status',
   'billing/orders',
+  'billing/payment-links',
+  'billing/payment-links/quote',
   'billing/payment-links/status',
   'billing/verify',
 ]

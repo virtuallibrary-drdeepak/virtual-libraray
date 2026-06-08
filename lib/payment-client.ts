@@ -195,6 +195,7 @@ export type PaymentLinkStatusResponse = {
   accountSetupRequired?: boolean
   accessGranted?: boolean
   message?: string
+  returnUrl?: string
   order?: {
     id: string
     status: string
