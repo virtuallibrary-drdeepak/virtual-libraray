@@ -8,11 +8,10 @@ const CONFIGURED_BACKEND_BASE_URL =
   DEFAULT_BACKEND_BASE_URL
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
 const CHECKOUT_DEBUG_PATHS = [
-  'auth/checkout/otp/start',
-  'auth/checkout/otp/verify',
-  'billing/guest/payment-links',
-  'billing/guest/payment-links/quote',
-  'billing/guest/payment-links/status',
+  'auth/login/otp/start',
+  'auth/login/otp/verify',
+  'auth/register/start',
+  'auth/register/verify',
   'billing/orders',
   'billing/payment-links',
   'billing/payment-links/quote',
