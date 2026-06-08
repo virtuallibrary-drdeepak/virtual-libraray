@@ -11,6 +11,7 @@ import {
   BillingPlansResponse,
   BillingPricing,
   BillingQuoteResponse,
+  BillingTracking,
   BillingVerifyResponse,
   buildReturnUrl,
   CheckoutOtpVerifyResponse,
@@ -33,6 +34,7 @@ import {
   TrialVerifyResponse,
   verifyOtp,
 } from '@/lib/payment-client'
+import { getMarketingAttribution } from '@/lib/marketing-attribution'
 import {
   getPricingPlanMeta,
   PricingPlanCard,
@@ -78,6 +80,13 @@ type CheckoutActionState = {
 
 type BillingDetails = {
   email: string
+}
+
+type PixelPlan = {
+  planId?: string
+  name?: string
+  amountPaise?: number
+  currency?: string
 }
 
 type PaymentSessionUser = {
@@ -1596,9 +1605,17 @@ export default function PaymentPage() {
           planId: selectedPlan.planId,
           courseId: selectedCourse?.courseId,
           couponCode: getCouponCodeForSubmit(activeCouponCode),
+          marketingAttribution: getMarketingAttribution(),
         }),
       })
 
+      trackInitiateCheckoutPixel(
+        order.plan,
+        order.pricing || checkoutPricing,
+        order.tracking,
+        getBillingOrderAmountPaise(order),
+        order.currency || order.razorpay?.currency || order.plan.currency
+      )
       openPaymentDestination(order)
     } catch (error) {
       if (error instanceof PaymentApiError && error.status === 401) {
@@ -1706,6 +1723,7 @@ export default function PaymentPage() {
           courseId: selectedCourse?.courseId,
           ...(!sessionUser ? customerPayload : {}),
           couponCode: couponCodeForSubmit,
+          marketingAttribution: getMarketingAttribution(),
         }),
       })
       const paymentUrl = getPaymentLinkUrl(created)
@@ -1721,6 +1739,14 @@ export default function PaymentPage() {
         setCheckoutLoading(false)
         return
       }
+
+      trackInitiateCheckoutPixel(
+        selectedPlan,
+        created.pricing || checkoutPricing,
+        created.tracking,
+        created.order.amountPaise,
+        created.order.currency
+      )
 
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
@@ -1847,6 +1873,7 @@ export default function PaymentPage() {
           planId: selectedPlan.planId,
           courseId: selectedCourse?.courseId,
           couponCode: getCouponCodeForSubmit(activeCouponCode),
+          marketingAttribution: getMarketingAttribution(),
         }),
       })
       const paymentUrl = getPaymentLinkUrl(created)
@@ -1862,6 +1889,14 @@ export default function PaymentPage() {
         setCheckoutLoading(false)
         return
       }
+
+      trackInitiateCheckoutPixel(
+        selectedPlan,
+        created.pricing || checkoutPricing,
+        created.tracking,
+        created.order.amountPaise,
+        created.order.currency
+      )
 
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
@@ -2038,6 +2073,13 @@ export default function PaymentPage() {
           returnUrl: verification.returnUrl,
         })
         setStatusNote('Payment completed successfully.')
+        trackPurchasePixel(
+          order.plan,
+          order.pricing,
+          verification.tracking,
+          getBillingOrderAmountPaise(order),
+          order.currency || order.razorpay?.currency || order.plan.currency
+        )
         postMobileEvent('PAYMENT_SUCCESS', {
           status: 'success',
           planId: order.plan.planId,
@@ -2427,6 +2469,7 @@ export default function PaymentPage() {
           pendingPollRef.current = null
         }
 
+        trackPurchasePixel(selectedPlan, checkoutPricing, status.tracking)
         await openAccountSetup(orderId)
         return true
       }
@@ -2454,6 +2497,7 @@ export default function PaymentPage() {
           returnUrl,
         })
         setStatusNote('Payment completed successfully.')
+        trackPurchasePixel(selectedPlan, checkoutPricing, status.tracking)
         postMobileEvent('PAYMENT_SUCCESS', {
           status: 'success',
           orderId,
@@ -4995,6 +5039,109 @@ function getCheckoutPricing(plan: BillingPlan | null, quote: BillingQuoteRespons
     finalAmountPaise: plan.amountPaise,
     currency: plan.currency,
   }
+}
+
+function trackInitiateCheckoutPixel(
+  plan: PixelPlan | null,
+  pricing: BillingPricing | null | undefined,
+  tracking?: BillingTracking,
+  fallbackAmountPaise?: number,
+  fallbackCurrency?: string
+) {
+  trackCommercePixel(
+    'InitiateCheckout',
+    tracking?.initiateCheckoutEventId,
+    plan,
+    pricing,
+    fallbackAmountPaise,
+    fallbackCurrency
+  )
+}
+
+function trackPurchasePixel(
+  plan: PixelPlan | null,
+  pricing: BillingPricing | null | undefined,
+  tracking?: BillingTracking,
+  fallbackAmountPaise?: number,
+  fallbackCurrency?: string
+) {
+  trackCommercePixel(
+    'Purchase',
+    tracking?.purchaseEventId,
+    plan,
+    pricing,
+    fallbackAmountPaise,
+    fallbackCurrency
+  )
+}
+
+function trackCommercePixel(
+  eventName: 'InitiateCheckout' | 'Purchase',
+  eventId: string | undefined,
+  plan: PixelPlan | null,
+  pricing: BillingPricing | null | undefined,
+  fallbackAmountPaise?: number,
+  fallbackCurrency?: string
+) {
+  try {
+    if (!eventId || typeof window === 'undefined' || !window.fbq) {
+      return
+    }
+
+    const storageKey = `vl_meta_pixel_event:${eventName}:${eventId}`
+
+    try {
+      if (window.sessionStorage.getItem(storageKey)) {
+        return
+      }
+    } catch {
+      // Pixel tracking should remain best-effort.
+    }
+
+    window.fbq(
+      'track',
+      eventName,
+      buildCommercePixelPayload(plan, pricing, fallbackAmountPaise, fallbackCurrency),
+      { eventID: eventId }
+    )
+
+    try {
+      window.sessionStorage.setItem(storageKey, '1')
+    } catch {
+      // Avoid blocking checkout if session storage is unavailable.
+    }
+  } catch {
+    // Ad blockers or Pixel failures must not affect checkout.
+  }
+}
+
+function buildCommercePixelPayload(
+  plan: PixelPlan | null,
+  pricing: BillingPricing | null | undefined,
+  fallbackAmountPaise?: number,
+  fallbackCurrency?: string
+) {
+  const amountPaise = pricing?.finalAmountPaise ?? fallbackAmountPaise ?? plan?.amountPaise ?? 0
+  const payload: Record<string, unknown> = {
+    value: amountPaise / 100,
+    currency: pricing?.currency || fallbackCurrency || plan?.currency || 'INR',
+    content_name: plan?.name || 'Virtual Library Membership',
+    content_type: 'product',
+  }
+
+  if (plan?.planId) {
+    payload.content_ids = [plan.planId]
+  }
+
+  return payload
+}
+
+function getBillingOrderAmountPaise(order: BillingOrderResponse) {
+  return order.pricing?.finalAmountPaise ??
+    order.order?.amountPaise ??
+    order.amount ??
+    order.razorpay?.amountPaise ??
+    order.plan.amountPaise
 }
 
 function getAvailableCouponBenefit(coupon: AvailableBillingCoupon) {

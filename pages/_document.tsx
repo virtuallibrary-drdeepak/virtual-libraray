@@ -1,6 +1,8 @@
 import { Html, Head, Main, NextScript } from 'next/document'
 
 export default function Document() {
+  const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID
+
   return (
     <Html lang="en">
       <Head>
@@ -16,10 +18,12 @@ export default function Document() {
         />
         {/* End Google Tag Manager */}
 
-        {/* Meta Pixel Code */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+        {metaPixelId && (
+          <>
+            {/* Meta Pixel Code */}
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
                     !function(f,b,e,v,n,t,s)
                     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
                     n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -28,11 +32,13 @@ export default function Document() {
                     t.src=v;s=b.getElementsByTagName(e)[0];
                     s.parentNode.insertBefore(t,s)}(window, document,'script',
                     'https://connect.facebook.net/en_US/fbevents.js');
-                    fbq('init', '1788102748497505');
+                    fbq('init', ${JSON.stringify(metaPixelId)});
                     fbq('track', 'PageView');`,
-          }}
-        />
-        {/* End Meta Pixel Code */}
+              }}
+            />
+            {/* End Meta Pixel Code */}
+          </>
+        )}
       </Head>
       <body>
         {/* Google Tag Manager (noscript) */}
@@ -46,16 +52,20 @@ export default function Document() {
         </noscript>
         {/* End Google Tag Manager (noscript) */}
 
-        {/* Meta Pixel (noscript) */}
-        <noscript>
-          <img
-            height="1"
-            width="1"
-            style={{ display: 'none' }}
-            src="https://www.facebook.com/tr?id=1788102748497505&ev=PageView&noscript=1"
-          />
-        </noscript>
-        {/* End Meta Pixel (noscript) */}
+        {metaPixelId && (
+          <>
+            {/* Meta Pixel (noscript) */}
+            <noscript>
+              <img
+                height="1"
+                width="1"
+                style={{ display: 'none' }}
+                src={`https://www.facebook.com/tr?id=${encodeURIComponent(metaPixelId)}&ev=PageView&noscript=1`}
+              />
+            </noscript>
+            {/* End Meta Pixel (noscript) */}
+          </>
+        )}
 
         <Main />
         <NextScript />
@@ -63,4 +73,3 @@ export default function Document() {
     </Html>
   )
 }
-
