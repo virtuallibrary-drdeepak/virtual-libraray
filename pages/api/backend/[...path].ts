@@ -45,6 +45,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   copyHeader(headers, 'content-type', req.headers['content-type'])
   copyHeader(headers, 'accept', req.headers.accept)
   copyHeader(headers, 'user-agent', req.headers['user-agent'])
+  copyHeader(headers, 'referer', req.headers.referer)
+  copyHeader(headers, 'x-forwarded-for', req.headers['x-forwarded-for'] || req.socket.remoteAddress)
+  copyHeader(headers, 'x-real-ip', req.headers['x-real-ip'] || req.socket.remoteAddress)
+  copyHeader(headers, 'x-forwarded-host', req.headers['x-forwarded-host'] || req.headers.host)
+  copyHeader(headers, 'x-forwarded-proto', req.headers['x-forwarded-proto'])
 
   if (checkoutDebug) {
     console.info('[checkout-backend]', 'request', {

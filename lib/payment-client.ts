@@ -50,6 +50,11 @@ export type BillingPricing = {
   currency: string
 }
 
+export type BillingTracking = {
+  initiateCheckoutEventId?: string
+  purchaseEventId?: string
+}
+
 export type BillingCoupon = {
   couponId: string | null
   code: string
@@ -138,6 +143,7 @@ export type BillingOrderResponse = {
   }
   pricing?: BillingPricing
   coupon?: BillingCoupon | null
+  tracking?: BillingTracking
   user?: {
     name?: string
     email?: string
@@ -153,6 +159,7 @@ export type BillingVerifyResponse = {
   returnUrl?: string
   accessGranted?: boolean
   message?: string
+  tracking?: BillingTracking
 }
 
 export type PaymentLinkCreateResponse = {
@@ -180,6 +187,7 @@ export type PaymentLinkCreateResponse = {
   }
   pricing?: BillingPricing
   coupon?: BillingCoupon | null
+  tracking?: BillingTracking
   customer?: {
     phoneE164Masked?: string
     email?: string
@@ -204,6 +212,7 @@ export type PaymentLinkStatusResponse = {
     paidAt?: string
     accessGrantedAt?: string
   }
+  tracking?: BillingTracking
 }
 
 export type CheckoutOtpVerifyResponse = {
