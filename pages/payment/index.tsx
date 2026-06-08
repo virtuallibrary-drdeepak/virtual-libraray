@@ -42,6 +42,7 @@ import {
 
 type ScreenState =
   | 'booting'
+  | 'auth'
   | 'planSelect'
   | 'otp'
   | 'course'
@@ -54,6 +55,8 @@ type ScreenState =
   | 'failed'
   | 'error'
 type AuthMode = 'unknown' | 'cookie' | 'bearer' | 'unauthenticated'
+type CheckoutAuthTab = 'signup' | 'login'
+type CheckoutAuthAction = 'signup-start' | 'signup-verify' | 'login-start' | 'login-verify'
 type AccountSetupStep = 'profile' | 'course'
 type AccountGender = 'FEMALE' | 'MALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | ''
 type SignupGender = 'FEMALE' | 'MALE' | 'PREFER_NOT_TO_SAY' | ''
@@ -242,6 +245,19 @@ export default function PaymentPage() {
   const [checkoutName, setCheckoutName] = useState('')
   const [checkoutGender, setCheckoutGender] = useState<SignupGender>('')
   const [checkoutTermsAccepted, setCheckoutTermsAccepted] = useState(false)
+  const [checkoutAuthTab, setCheckoutAuthTab] = useState<CheckoutAuthTab>('signup')
+  const [checkoutAuthLoading, setCheckoutAuthLoading] = useState(false)
+  const [checkoutAuthAction, setCheckoutAuthAction] = useState<CheckoutAuthAction | null>(null)
+  const [checkoutSignupOtpStarted, setCheckoutSignupOtpStarted] = useState(false)
+  const [checkoutLoginOtpStarted, setCheckoutLoginOtpStarted] = useState(false)
+  const [checkoutSignupOtp, setCheckoutSignupOtp] = useState('')
+  const [checkoutLoginOtp, setCheckoutLoginOtp] = useState('')
+  const [checkoutSignupReference, setCheckoutSignupReference] = useState('')
+  const [checkoutPassword, setCheckoutPassword] = useState('')
+  const [checkoutConfirmPassword, setCheckoutConfirmPassword] = useState('')
+  const [checkoutPasswordVisible, setCheckoutPasswordVisible] = useState(false)
+  const [checkoutLoginIdentifier, setCheckoutLoginIdentifier] = useState('')
+  const [checkoutLoginOtpTarget, setCheckoutLoginOtpTarget] = useState('')
   const [paymentPhoneOtpRequired, setPaymentPhoneOtpRequired] = useState(false)
   const [paymentOrderId, setPaymentOrderId] = useState('')
   const [statusTimedOut, setStatusTimedOut] = useState(false)
@@ -278,14 +294,20 @@ export default function PaymentPage() {
   const isPrimaryPaymentLinksFlow = !isLegacyCheckoutFlow && Boolean(planIdFromQuery || durationMonthsFromQuery || paymentStatusFromQuery)
   const shouldUseV2WebFallback = checkoutSource === 'v2-neet-pg'
   const shouldLoadCheckoutScript = router.isReady && isLegacyCheckoutFlow
-  const isSessionPaymentLinkCheckout = isPrimaryPaymentLinksFlow && Boolean(sessionUser)
+  const hasAuthenticatedCheckoutSession =
+    Boolean(sessionUser) ||
+    authMode === 'bearer' ||
+    authMode === 'cookie' ||
+    Boolean(tokenStore.getAccessToken())
+  const shouldUseCheckoutAuthTabs = isPrimaryPaymentLinksFlow && !isMobileCheckout
+  const isSessionPaymentLinkCheckout = isPrimaryPaymentLinksFlow && hasAuthenticatedCheckoutSession
   const isMobileHandoffCheckout =
     !isLegacyCheckoutFlow &&
     isMobileCheckout &&
     Boolean(sessionUser)
   const isAuthenticatedPaymentLinkCheckout =
     isPrimaryPaymentLinksFlow &&
-    Boolean(sessionUser) &&
+    hasAuthenticatedCheckoutSession &&
     !isLegacyCheckoutFlow
 
   const selectedPlan = useMemo(
@@ -432,6 +454,11 @@ export default function PaymentPage() {
     setTrialOtpStarted(false)
     setTrialError('')
     setTrialMessage('')
+    setCheckoutSignupOtp('')
+    setCheckoutLoginOtp('')
+    setCheckoutSignupOtpStarted(false)
+    setCheckoutLoginOtpStarted(false)
+    setCheckoutLoginOtpTarget('')
   }, [selectedPlanId])
 
   useEffect(() => {
@@ -468,6 +495,23 @@ export default function PaymentPage() {
     postMobileEvent('AUTH_REQUIRED')
   }
 
+  function openCheckoutAuthScreen(statusMessage = 'Create an account or log in to continue to payment.') {
+    setAuthMode('unauthenticated')
+    setCheckoutAuthTab((current) => current || 'signup')
+    setCheckoutAuthLoading(false)
+    setCheckoutAuthAction(null)
+    setCheckoutSignupOtp('')
+    setCheckoutLoginOtp('')
+    setCheckoutSignupOtpStarted(false)
+    setCheckoutLoginOtpStarted(false)
+    setCheckoutLoginOtpTarget('')
+    setAuthError('')
+    setBillingError('')
+    setPageError('')
+    setScreen('auth')
+    setStatusNote(statusMessage)
+  }
+
   function ensureAuthorization(message: string) {
     if (tokenStore.getAccessToken()) {
       return true
@@ -475,6 +519,11 @@ export default function PaymentPage() {
 
     if (authMode === 'cookie') {
       return true
+    }
+
+    if (shouldUseCheckoutAuthTabs) {
+      openCheckoutAuthScreen(message)
+      return false
     }
 
     openOtpScreen(message)
@@ -691,7 +740,7 @@ export default function PaymentPage() {
     const orderIdFromQuery = getQueryParam(router.query.orderId) || getQueryParam(router.query.paymentOrderId)
     const checkoutOrderId = orderIdFromQuery || storedCheckoutSession.orderId
 
-    if (checkoutOrderId && storedCheckoutSession.claimToken) {
+    if (checkoutOrderId && storedCheckoutSession.sessionUser) {
       setPaymentOrderId(checkoutOrderId)
       setScreen('pending')
       setResult({
@@ -867,8 +916,8 @@ export default function PaymentPage() {
       setSelectedCourseChoice(nextCourse?.courseId || '')
       setSelectedPlanId(matchingPlan.planId)
       setAuthMode(user ? (tokenStore.getAccessToken() ? 'bearer' : 'cookie') : 'unauthenticated')
-      setScreen('ready')
-      setStatusNote(user ? 'Review your plan and apply a coupon if you have one.' : 'Enter your signup details to create your Razorpay payment link.')
+      setScreen(user || !shouldUseCheckoutAuthTabs ? 'ready' : 'auth')
+      setStatusNote(user ? 'Review your plan and apply a coupon if you have one.' : 'Create an account or log in to continue to payment.')
     } catch (error) {
       setScreen('error')
       setPageError(getErrorMessage(error, 'Unable to load selected plan. Please try again.'))
@@ -976,20 +1025,6 @@ export default function PaymentPage() {
   }
 
   async function handleRequestOtp() {
-    const storedCheckoutSession = getStoredCheckoutSession()
-
-    if (storedCheckoutSession.orderId && storedCheckoutSession.claimToken) {
-      setPaymentOrderId(storedCheckoutSession.orderId)
-      setScreen('pending')
-      setResult({
-        title: 'Checking payment',
-        message: 'We are checking your Razorpay payment status.',
-        tone: 'warning',
-      })
-      await checkPaymentLinkStatus(storedCheckoutSession.orderId, true)
-      return
-    }
-
     setOtpLoading(true)
     setOtpAction('send')
     setAuthError('')
@@ -1041,6 +1076,190 @@ export default function PaymentPage() {
       setOtpLoading(false)
       setOtpAction(null)
     }
+  }
+
+  async function handleStartCheckoutSignup() {
+    const payload = getCheckoutSignupPayload()
+
+    if (!payload) {
+      return
+    }
+
+    setCheckoutAuthLoading(true)
+    setCheckoutAuthAction('signup-start')
+    setAuthError('')
+    setBillingError('')
+    setPageError('')
+
+    try {
+      const started = await apiFetch<any>('/auth/register/start', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify(payload),
+      })
+
+      setCheckoutSignupReference(extractCheckoutAuthReference(started))
+      setCheckoutSignupOtpStarted(true)
+      setStatusNote('OTP sent. Verify your account to continue to payment.')
+    } catch (error) {
+      setAuthError(getCheckoutAuthErrorMessage(error, 'Could not start account creation. Please try again.'))
+    } finally {
+      setCheckoutAuthLoading(false)
+      setCheckoutAuthAction(null)
+    }
+  }
+
+  async function handleVerifyCheckoutSignup() {
+    const payload = getCheckoutSignupPayload()
+    const code = checkoutSignupOtp.trim()
+
+    if (!payload) {
+      return
+    }
+
+    if (code.length < 4) {
+      setAuthError('Enter the OTP sent to your mobile number.')
+      return
+    }
+
+    setCheckoutAuthLoading(true)
+    setCheckoutAuthAction('signup-verify')
+    setAuthError('')
+    setBillingError('')
+    setPageError('')
+
+    try {
+      const completed = await apiFetch<any>('/auth/register/verify', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          ...payload,
+          phoneCode: code,
+          registrationId: checkoutSignupReference || undefined,
+          pendingRegistrationId: checkoutSignupReference || undefined,
+        }),
+      })
+
+      await completeCheckoutAuth(completed, {
+        email: payload.email,
+        name: payload.name,
+        phoneE164: payload.phoneE164,
+      })
+      setCheckoutSignupOtp('')
+      setCheckoutSignupOtpStarted(false)
+      setCheckoutSignupReference('')
+    } catch (error) {
+      setAuthError(getCheckoutAuthErrorMessage(error, 'Could not verify your account. Please try again.'))
+    } finally {
+      setCheckoutAuthLoading(false)
+      setCheckoutAuthAction(null)
+    }
+  }
+
+  async function handleStartCheckoutLogin() {
+    const identifier = getCheckoutLoginIdentifier()
+
+    if (!identifier) {
+      return
+    }
+
+    setCheckoutAuthLoading(true)
+    setCheckoutAuthAction('login-start')
+    setAuthError('')
+    setBillingError('')
+    setPageError('')
+
+    try {
+      await apiFetch('/auth/login/otp/start', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          identifier,
+        }),
+      })
+
+      setCheckoutLoginOtpStarted(true)
+      setCheckoutLoginOtpTarget(getCheckoutLoginOtpTargetLabel(identifier))
+      setStatusNote('OTP sent. Verify login to continue to payment.')
+    } catch (error) {
+      setAuthError(getCheckoutAuthErrorMessage(error, 'Could not send login OTP. Please try again.'))
+    } finally {
+      setCheckoutAuthLoading(false)
+      setCheckoutAuthAction(null)
+    }
+  }
+
+  async function handleVerifyCheckoutLogin() {
+    const identifier = getCheckoutLoginIdentifier()
+    const code = checkoutLoginOtp.trim()
+
+    if (!identifier) {
+      return
+    }
+
+    if (code.length < 4) {
+      setAuthError('Enter the OTP sent to your phone or email.')
+      return
+    }
+
+    setCheckoutAuthLoading(true)
+    setCheckoutAuthAction('login-verify')
+    setAuthError('')
+    setBillingError('')
+    setPageError('')
+
+    try {
+      const completed = await apiFetch<any>('/auth/login/otp/verify', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          identifier,
+          code,
+        }),
+      })
+
+      await completeCheckoutAuth(completed, {})
+      setCheckoutLoginOtp('')
+      setCheckoutLoginOtpStarted(false)
+      setCheckoutLoginOtpTarget('')
+    } catch (error) {
+      setAuthError(getCheckoutAuthErrorMessage(error, 'Could not verify login OTP. Please try again.'))
+    } finally {
+      setCheckoutAuthLoading(false)
+      setCheckoutAuthAction(null)
+    }
+  }
+
+  async function completeCheckoutAuth(
+    response: any,
+    fallbackUser: PaymentSessionUser
+  ) {
+    const accessToken = extractAccessToken(response)
+    const refreshToken = extractRefreshToken(response)
+
+    if (!accessToken) {
+      throw new Error('Backend did not return an access token.')
+    }
+
+    tokenStore.setTokens({
+      accessToken,
+      refreshToken,
+    })
+    setAuthMode('bearer')
+    postMobileEvent('AUTH_SUCCESS', {
+      accessToken,
+      refreshToken,
+    })
+
+    const user = await loadSessionUser()
+    setSessionUser(user || fallbackUser || null)
+    setCheckoutAuthLoading(false)
+    setCheckoutAuthAction(null)
+    setAuthError('')
+    setBillingError('')
+    setPageError('')
+    setScreen('ready')
+    setStatusNote('Review your plan and apply a coupon if you have one.')
   }
 
   async function handleSaveCourseSelection() {
@@ -1147,6 +1366,15 @@ export default function PaymentPage() {
       return
     }
 
+    if (isPrimaryPaymentLinksFlow && !hasAuthenticatedCheckoutSession) {
+      if (shouldUseCheckoutAuthTabs) {
+        openCheckoutAuthScreen('Create an account or log in before applying a coupon.')
+      } else {
+        openOtpScreen('Sign in with your phone number to apply a coupon.')
+      }
+      return
+    }
+
     if (!isPrimaryPaymentLinksFlow && !ensureAuthorization('Sign in with your phone number to apply a coupon.')) {
       return
     }
@@ -1158,25 +1386,12 @@ export default function PaymentPage() {
     try {
       const requestPlanId = selectedPlan.planId
       const quoteEndpoint = getCouponPreviewEndpoint()
-      const guestQuotePayload = isPrimaryPaymentLinksFlow && !sessionUser
-        ? getGuestSignupCheckoutPayload({
-          requireGender: false,
-          requireTerms: false,
-        })
-        : null
-
-      if (isPrimaryPaymentLinksFlow && !sessionUser && !guestQuotePayload) {
-        setCouponLoading(false)
-        return
-      }
 
       const quote = await apiFetch<BillingQuoteResponse>(quoteEndpoint, {
         method: 'POST',
-        skipAuth: isPrimaryPaymentLinksFlow && !sessionUser,
         body: JSON.stringify({
           planId: requestPlanId,
           ...(isMobileHandoffCheckout || isAuthenticatedPaymentLinkCheckout ? { courseId: selectedCourse?.courseId } : {}),
-          ...(guestQuotePayload ? getPaymentLinkCustomerPayload(guestQuotePayload) : {}),
           couponCode: nextCouponCode,
         }),
       })
@@ -1201,7 +1416,7 @@ export default function PaymentPage() {
       if (
         error instanceof PaymentApiError &&
         error.status === 401 &&
-        (!isPrimaryPaymentLinksFlow || sessionUser)
+        (!isPrimaryPaymentLinksFlow || hasAuthenticatedCheckoutSession)
       ) {
         tokenStore.clear()
         setSessionUser(null)
@@ -1499,13 +1714,106 @@ export default function PaymentPage() {
     return payload
   }
 
+  function getCheckoutSignupPayload() {
+    const name = checkoutName.trim()
+    const validationError = validateBillingDetails(billingDetails, phone)
+
+    if (validationError) {
+      setBillingError(validationError)
+      return null
+    }
+
+    if (!name) {
+      setBillingError('Enter your full name.')
+      return null
+    }
+
+    if (!checkoutGender) {
+      setBillingError('Choose your gender.')
+      return null
+    }
+
+    if (!selectedCourse?.courseId && !selectedCoursePreview?.courseId) {
+      setBillingError('Select your course to continue.')
+      return null
+    }
+
+    if (!checkoutTermsAccepted) {
+      setBillingError('Accept the terms and privacy policy to continue.')
+      return null
+    }
+
+    const passwordError = validateAccountPassword(checkoutPassword)
+
+    if (passwordError) {
+      setBillingError(passwordError)
+      return null
+    }
+
+    if (checkoutPassword !== checkoutConfirmPassword) {
+      setBillingError('Passwords do not match.')
+      return null
+    }
+
+    try {
+      const normalizedPhone = normalizeIndianPhone(phone)
+      const course = selectedCourse || selectedCoursePreview
+
+      return {
+        name,
+        email: billingDetails.email.trim().toLowerCase(),
+        phoneE164: normalizedPhone.e164,
+        gender: checkoutGender,
+        password: checkoutPassword,
+        courseId: course?.courseId,
+        privacyPolicyVersion: privacyPolicyVersion || undefined,
+      }
+    } catch (error) {
+      setBillingError(getErrorMessage(error, 'Enter a valid mobile number.'))
+      return null
+    }
+  }
+
+  function getCheckoutLoginIdentifier() {
+    const rawIdentifier = checkoutLoginIdentifier.trim()
+
+    if (!rawIdentifier) {
+      setAuthError('Enter your phone number or email.')
+      return ''
+    }
+
+    if (rawIdentifier.includes('@')) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier)) {
+        setAuthError('Enter a valid email address.')
+        return ''
+      }
+
+      return rawIdentifier.toLowerCase()
+    }
+
+    try {
+      return normalizeIndianPhone(rawIdentifier).e164
+    } catch (error) {
+      setAuthError(getErrorMessage(error, 'Enter a valid phone number or email.'))
+      return ''
+    }
+  }
+
+  function getCheckoutLoginOtpTargetLabel(identifier: string) {
+    if (identifier.includes('@')) {
+      return `mobile linked to ${identifier}`
+    }
+
+    return maskPhone(identifier) || identifier
+  }
+
   function getCouponPreviewEndpoint() {
     if (isMobileHandoffCheckout || isAuthenticatedPaymentLinkCheckout) {
       return '/billing/payment-links/quote'
     }
 
-    if (isPrimaryPaymentLinksFlow && !sessionUser) {
-      return '/billing/guest/payment-links/quote'
+    if (isPrimaryPaymentLinksFlow) {
+      return '/billing/payment-links/quote'
     }
 
     return '/billing/quote'
@@ -1514,16 +1822,14 @@ export default function PaymentPage() {
   async function revalidatePaymentLinkCoupon(
     requestPlanId: string,
     validatedCouponCode: string,
-    customerPayload: PaymentLinkCustomerPayload
+    _customerPayload: PaymentLinkCustomerPayload
   ) {
     const quote = await apiFetch<BillingQuoteResponse>(
-      '/billing/guest/payment-links/quote',
+      '/billing/payment-links/quote',
       {
         method: 'POST',
-        skipAuth: !sessionUser,
         body: JSON.stringify({
           planId: requestPlanId,
-          ...(!sessionUser ? customerPayload : {}),
           couponCode: validatedCouponCode,
         }),
       }
@@ -1566,8 +1872,12 @@ export default function PaymentPage() {
       return
     }
 
-    if (isPrimaryPaymentLinksFlow && !sessionUser) {
-      await createPaymentLink()
+    if (isPrimaryPaymentLinksFlow && !hasAuthenticatedCheckoutSession) {
+      if (shouldUseCheckoutAuthTabs) {
+        openCheckoutAuthScreen('Create an account or log in before continuing to payment.')
+      } else {
+        openOtpScreen('Sign in with your phone number to continue to payment.')
+      }
       return
     }
 
@@ -1632,208 +1942,7 @@ export default function PaymentPage() {
   }
 
   async function createPaymentLink() {
-    if (!selectedPlan) {
-      setPageError('Select a plan before continuing.')
-      return
-    }
-
-    const guestSignupPayload = sessionUser
-      ? null
-      : getGuestSignupCheckoutPayload({
-        requireGender: true,
-        requireTerms: true,
-      })
-    const customerPayload = sessionUser
-      ? getSessionPaymentLinkCustomerPayload()
-      : guestSignupPayload
-        ? getPaymentLinkCustomerPayload(guestSignupPayload)
-        : null
-
-    if (!customerPayload) {
-      return
-    }
-
-    setCheckoutLoading(true)
-    setPageError('')
-    setAuthError('')
-    setBillingError('')
-    setResult(null)
-    setStatusTimedOut(false)
-    setStatusNote('Creating your Razorpay payment link...')
-    void logLocalCheckoutDebug('guest_payment_link_create_start', {
-      planId: selectedPlan.planId,
-      courseId: selectedCourse?.courseId || '',
-      couponPresent: Boolean(activeCouponCode),
-      customer: {
-        emailMasked: maskEmail(customerPayload.email || ''),
-        gender: guestSignupPayload?.gender || '',
-        namePresent: Boolean(customerPayload.name),
-        phoneMasked: maskPhone(customerPayload.phoneE164 || ''),
-      },
-    })
-
-    try {
-      const couponCodeForSubmit = getCouponCodeForSubmit(activeCouponCode)
-
-      if (couponCodeForSubmit) {
-        setStatusNote('Validating coupon for checkout...')
-        const isCouponStillValid = await revalidatePaymentLinkCoupon(
-          selectedPlan.planId,
-          couponCodeForSubmit,
-          customerPayload
-        )
-
-        if (!isCouponStillValid) {
-          setCheckoutLoading(false)
-          return
-        }
-      }
-
-      if (!sessionUser && !couponCodeForSubmit) {
-        setStatusNote('Checking checkout total...')
-        const quote = await apiFetch<BillingQuoteResponse>('/billing/guest/payment-links/quote', {
-          method: 'POST',
-          skipAuth: true,
-          body: JSON.stringify({
-            planId: selectedPlan.planId,
-            ...customerPayload,
-          }),
-        })
-
-        if (selectedPlanIdRef.current !== selectedPlan.planId) {
-          setCheckoutLoading(false)
-          return
-        }
-
-        setCouponQuote(quote)
-        void logLocalCheckoutDebug('guest_payment_link_quote_success', {
-          planId: selectedPlan.planId,
-          couponStatus: quote.couponStatus,
-          finalAmountPaise: quote.pricing?.finalAmountPaise,
-          isValidCoupon: quote.isValidCoupon,
-        })
-      }
-
-      setStatusNote('Creating your Razorpay payment link...')
-      const created = await apiFetch<PaymentLinkCreateResponse>('/billing/guest/payment-links', {
-        method: 'POST',
-        skipAuth: !sessionUser,
-        body: JSON.stringify({
-          planId: selectedPlan.planId,
-          courseId: selectedCourse?.courseId,
-          ...(!sessionUser ? customerPayload : {}),
-          couponCode: couponCodeForSubmit,
-          marketingAttribution: getMarketingAttribution(),
-        }),
-      })
-      const paymentUrl = getPaymentLinkUrl(created)
-
-      if (!paymentUrl) {
-        setPageError('Backend did not return a Razorpay payment link. Please try again.')
-        setCheckoutLoading(false)
-        return
-      }
-
-      if (!created.order?.id || !created.checkout?.claimToken) {
-        setPageError('Checkout session is incomplete. Please retry payment from pricing.')
-        setCheckoutLoading(false)
-        return
-      }
-
-      trackInitiateCheckoutPixel(
-        selectedPlan,
-        created.pricing || checkoutPricing,
-        created.tracking,
-        created.order.amountPaise,
-        created.order.currency
-      )
-
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.setItem(CHECKOUT_PAYMENT_ORDER_ID_KEY, created.order.id)
-        window.sessionStorage.setItem(CHECKOUT_CLAIM_TOKEN_KEY, created.checkout.claimToken)
-        window.sessionStorage.setItem(CHECKOUT_PAYMENT_URL_KEY, paymentUrl)
-        window.sessionStorage.setItem(CHECKOUT_PHONE_KEY, sessionUser?.phoneE164 || guestSignupPayload?.phoneE164 || customerPayload.phoneE164 || '')
-        window.sessionStorage.setItem(CHECKOUT_EMAIL_KEY, sessionUser?.email || guestSignupPayload?.email || customerPayload.email || '')
-        window.sessionStorage.setItem(CHECKOUT_NAME_KEY, sessionUser?.name || guestSignupPayload?.name || customerPayload.name || '')
-        window.sessionStorage.setItem(CHECKOUT_GENDER_KEY, guestSignupPayload?.gender || '')
-        window.sessionStorage.setItem(
-          CHECKOUT_ACCOUNT_EXISTS_KEY,
-          Boolean(created.customer?.accountExists || sessionUser) ? '1' : '0'
-        )
-        window.sessionStorage.setItem(
-          CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY,
-          created.checkout.accountSetupRequired ? '1' : '0'
-        )
-        window.sessionStorage.setItem(CHECKOUT_SESSION_USER_KEY, sessionUser ? '1' : '0')
-        window.sessionStorage.removeItem(CHECKOUT_RETURN_URL_KEY)
-      }
-
-      await logLocalCheckoutDebug('guest_payment_link_created_and_stored', {
-        orderId: created.order?.id || '',
-        claimPresent: Boolean(created.checkout.claimToken),
-        accountSetupRequired: Boolean(created.checkout.accountSetupRequired),
-        accountExists: Boolean(created.customer?.accountExists || sessionUser),
-        paymentHost: getUrlHost(paymentUrl),
-        storageAfterCreate: getStoredCheckoutSessionDebugSummary(),
-      })
-
-      postMobileEvent('OPEN_PAYMENT_LINK', {
-        planId: selectedPlan.planId,
-        orderId: created.order?.id,
-        paymentLink: paymentUrl,
-      })
-      window.location.assign(paymentUrl)
-    } catch (error) {
-      const errorCode = getPaymentErrorCode(error)
-      void logLocalCheckoutDebug('guest_payment_link_create_error', {
-        errorCode,
-        message: getErrorMessage(error, 'Could not create the payment link.'),
-        status: error instanceof PaymentApiError ? error.status : undefined,
-      })
-
-      if (error instanceof PaymentApiError && error.status === 401 && sessionUser) {
-        tokenStore.clear()
-        setSessionUser(null)
-        openOtpScreen('Sign in again to continue to payment.')
-        setCheckoutLoading(false)
-        return
-      }
-
-      if (error instanceof PaymentApiError && error.status === 404) {
-        setPageError('Selected plan is no longer available. Please return to pricing and choose again.')
-        if (planIdFromQuery) {
-          void loadPublicPlanForPayment(planIdFromQuery)
-        }
-        setCheckoutLoading(false)
-        return
-      }
-
-      if (errorCode === 'EMAIL_ALREADY_IN_USE') {
-        setPageError('This email already has an account. Use that account or choose another email.')
-        setCheckoutLoading(false)
-        return
-      }
-
-      if (errorCode === 'PHONE_EMAIL_MISMATCH') {
-        setPageError('This phone number is linked to another email. Use the existing email for this phone.')
-        setCheckoutLoading(false)
-        return
-      }
-
-      if (errorCode?.startsWith('COUPON_')) {
-        setCouponError(getErrorMessage(error, 'Coupon is not valid for this plan.'))
-        setCheckoutLoading(false)
-        return
-      }
-
-      setPageError(
-        errorCode === 'PAYMENT_LINK_CREATE_FAILED'
-          ? 'Could not create the Razorpay payment link. Please retry.'
-          : getErrorMessage(error, 'Could not create the payment link. Please try again.')
-      )
-      setCheckoutLoading(false)
-      setStatusNote('Payment link creation failed.')
-    }
+    openCheckoutAuthScreen('Create an account or log in before continuing to payment.')
   }
 
   async function createAuthenticatedPaymentLink() {
@@ -2222,24 +2331,7 @@ export default function PaymentPage() {
       storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
     })
 
-    if (storedCheckoutSession.claimToken && !storedCheckoutSession.sessionUser && (normalizedStatus === 'success' || normalizedStatus === 'captured')) {
-      setScreen('pending')
-      setResult({
-        title: 'Checking payment',
-        message: 'Payment succeeded. We are preparing account setup.',
-        tone: 'warning',
-      })
-
-      if (nextPaymentOrderId) {
-        await checkPaymentLinkStatus(nextPaymentOrderId, true)
-        return
-      }
-
-      await openAccountSetup(nextPaymentOrderId)
-      return
-    }
-
-    if (storedCheckoutSession.sessionUser && (normalizedStatus === 'success' || normalizedStatus === 'captured')) {
+    if (normalizedStatus === 'success' || normalizedStatus === 'captured') {
       setScreen('pending')
       setResult({
         title: 'Checking payment',
@@ -2257,10 +2349,9 @@ export default function PaymentPage() {
 
         return
       }
-    }
 
-    if (normalizedStatus === 'account_setup_required') {
-      await openAccountSetup(nextPaymentOrderId)
+      setScreen('error')
+      setPageError('Payment order id is missing. Please contact support with your payment id.')
       return
     }
 
@@ -2388,15 +2479,14 @@ export default function PaymentPage() {
 
     try {
       const storedCheckoutSession = getStoredCheckoutSession()
-      const claimToken = getCheckoutClaimToken()
       const isStoredSessionCheckout = storedCheckoutSession.sessionUser
       let canCheckAuthenticatedStatus =
-        isStoredSessionCheckout || Boolean(tokenStore.getAccessToken()) || authMode === 'cookie'
+        isStoredSessionCheckout || hasAuthenticatedCheckoutSession || Boolean(tokenStore.getAccessToken())
 
-      if (!claimToken && !canCheckAuthenticatedStatus && orderId) {
+      if (!canCheckAuthenticatedStatus && orderId) {
         const loadedSessionUser = await loadSessionUser()
 
-        canCheckAuthenticatedStatus = Boolean(loadedSessionUser) || Boolean(tokenStore.getAccessToken())
+        canCheckAuthenticatedStatus = Boolean(loadedSessionUser) || Boolean(tokenStore.getAccessToken()) || authMode === 'cookie'
         void logLocalCheckoutDebug('payment_link_status_auth_probe', {
           orderId,
           authMode,
@@ -2409,44 +2499,32 @@ export default function PaymentPage() {
       void logLocalCheckoutDebug('payment_link_status_check_start', {
         orderId,
         manual,
-        claimPresent: Boolean(claimToken),
         canCheckAuthenticatedStatus,
         storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
       })
 
-      if (isPrimaryPaymentLinksFlow && !claimToken && !canCheckAuthenticatedStatus) {
-        void logLocalCheckoutDebug('payment_link_status_check_blocked_missing_claim', {
+      if (isPrimaryPaymentLinksFlow && !canCheckAuthenticatedStatus) {
+        void logLocalCheckoutDebug('payment_link_status_check_blocked_missing_auth', {
           orderId,
           authMode,
           storedSession: getStoredCheckoutSessionDebugSummary(storedCheckoutSession),
         })
-        setScreen('error')
-        setPageError('Checkout session could not be verified. Please contact support with your payment id.')
+        if (shouldUseCheckoutAuthTabs) {
+          openCheckoutAuthScreen('Log in to check your payment status.')
+        } else {
+          openOtpScreen('Sign in again to refresh your payment status.')
+        }
         return false
       }
-      const status = claimToken
-        ? await apiFetch<PaymentLinkStatusResponse>('/billing/guest/payment-links/status', {
-          method: 'POST',
-          skipAuth: true,
-          body: JSON.stringify({
-            paymentOrderId: orderId,
-            claimToken,
-          }),
-        })
-        : await apiFetch<PaymentLinkStatusResponse>(`/billing/payment-links/status/${orderId}`, {
-          headers: {
-            Accept: 'application/json',
-          },
-        })
+      const status = await apiFetch<PaymentLinkStatusResponse>(`/billing/payment-links/status/${orderId}`, {
+        headers: {
+          Accept: 'application/json',
+        },
+      })
       const normalizedOrderStatus = status.status?.toUpperCase()
       const normalizedPaymentStatus = status.paymentStatus?.toUpperCase()
-      const isGuestCheckout = Boolean(claimToken)
       const captured = normalizedOrderStatus === 'CAPTURED' || normalizedPaymentStatus === 'CAPTURED'
-      const needsAccountSetup =
-        isGuestCheckout &&
-        !status.accessGranted &&
-        (normalizedOrderStatus === 'ACCOUNT_SETUP_REQUIRED' || status.accountSetupRequired || captured)
-      const completed = status.accessGranted || normalizedOrderStatus === 'COMPLETED' || (!isGuestCheckout && captured)
+      const completed = status.accessGranted || normalizedOrderStatus === 'COMPLETED' || captured
       const failed = normalizedOrderStatus === 'FAILED' || normalizedPaymentStatus === 'FAILED'
       const returnUrl = getCheckoutReturnUrlForStatus(status.returnUrl)
       void logLocalCheckoutDebug('payment_link_status_response', {
@@ -2458,21 +2536,9 @@ export default function PaymentPage() {
         captured,
         completed,
         failed,
-        isGuestCheckout,
         providerPaymentIdPresent: Boolean(status.order?.providerPaymentId),
         returnUrlPresent: Boolean(returnUrl),
       })
-
-      if (needsAccountSetup) {
-        if (pendingPollRef.current) {
-          window.clearInterval(pendingPollRef.current)
-          pendingPollRef.current = null
-        }
-
-        trackPurchasePixel(selectedPlan, checkoutPricing, status.tracking)
-        await openAccountSetup(orderId)
-        return true
-      }
 
       if (completed) {
         if (pendingPollRef.current) {
@@ -2753,230 +2819,21 @@ export default function PaymentPage() {
   }
 
   async function openAccountSetup(orderId: string) {
-    const claimToken = getCheckoutClaimToken()
-    void logLocalCheckoutDebug('account_setup_open_start', {
+    void logLocalCheckoutDebug('account_setup_removed', {
       orderId,
-      claimPresent: Boolean(claimToken),
       storedSession: getStoredCheckoutSessionDebugSummary(),
     })
-
-    if (!orderId || !claimToken) {
-      void logLocalCheckoutDebug('account_setup_open_blocked_missing_claim', {
-        orderId,
-        claimPresent: Boolean(claimToken),
-        storedSession: getStoredCheckoutSessionDebugSummary(),
-      })
-      setScreen('error')
-      setPageError('Checkout session could not be verified. Please contact support with your payment id.')
-      setResult({
-        title: 'Checkout session expired',
-        message: 'The payment is captured, but this browser no longer has the claim token needed to complete setup.',
-        tone: 'danger',
-      })
-      postMobileEvent('PAYMENT_FAILED', {
-        status: 'claim_invalid',
-        orderId,
-      })
-      return
-    }
-
-    const storedCheckoutSession = getStoredCheckoutSession()
-
-    setPaymentOrderId(orderId)
-    setAccountSetupStep('profile')
-    setAccountName((current) => current || storedCheckoutSession.name || '')
-    setAccountGender((current) => current || storedCheckoutSession.gender || '')
-    setAccountPassword('')
-    setAccountConfirmPassword('')
-    setScreen('accountSetup')
-    setCheckoutLoading(false)
-    setStatusNote('One more step left to activate your account.')
-    setResult({
-      title: 'One more step left',
-      message: 'Payment is confirmed. Verify your phone and set your account password to activate access.',
-      tone: 'success',
-    })
-
-    if (!accountOtpStarted) {
-      await startCheckoutOtp(orderId, claimToken)
-    }
+    setScreen('error')
+    setPageError('Account setup now happens before payment. Please restart checkout and log in before paying.')
   }
 
-  async function startCheckoutOtp(orderId = paymentOrderId, claimToken = getCheckoutClaimToken()) {
-    if (!orderId || !claimToken) {
-      void logLocalCheckoutDebug('checkout_otp_start_blocked_missing_claim', {
-        orderId,
-        claimPresent: Boolean(claimToken),
-        storedSession: getStoredCheckoutSessionDebugSummary(),
-      })
-      setAccountError('Checkout session is missing. Please contact support with your payment id.')
-      return
-    }
-
-    setAccountSetupLoading(true)
-    setAccountError('')
-    void logLocalCheckoutDebug('checkout_otp_start_request', {
-      orderId,
-      claimPresent: Boolean(claimToken),
-      channel: 'sms',
-    })
-
-    try {
-      await apiFetch('/auth/checkout/otp/start', {
-        method: 'POST',
-        skipAuth: true,
-        body: JSON.stringify({
-          paymentOrderId: orderId,
-          claimToken,
-          channel: 'sms',
-        }),
-      })
-      setAccountOtpStarted(true)
-      setStatusNote('OTP sent for checkout verification.')
-      void logLocalCheckoutDebug('checkout_otp_start_success', {
-        orderId,
-      })
-    } catch (error) {
-      void logLocalCheckoutDebug('checkout_otp_start_error', {
-        orderId,
-        message: getAccountSetupErrorMessage(error, 'Could not send OTP.'),
-        status: error instanceof PaymentApiError ? error.status : undefined,
-      })
-      setAccountError(getAccountSetupErrorMessage(error, 'Could not send OTP. Please try again.'))
-    } finally {
-      setAccountSetupLoading(false)
-    }
+  async function startCheckoutOtp() {
+    setAccountError('Account setup now happens before payment. Please restart checkout.')
   }
 
   async function handleCompleteAccountSetup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-
-    const storedCheckoutSession = getStoredCheckoutSession()
-    const name = (accountName || storedCheckoutSession.name).trim()
-    const gender = normalizeStoredSignupGender(accountGender || storedCheckoutSession.gender)
-    const code = accountOtp.trim()
-    const claimToken = getCheckoutClaimToken()
-    const isExistingAccountCheckout = storedCheckoutSession.accountExists
-    const password = accountPassword
-    const confirmPassword = accountConfirmPassword
-
-    if (!paymentOrderId || !claimToken) {
-      setAccountError('Checkout session is missing. Please contact support with your payment id.')
-      return
-    }
-
-    if (!code || code.length < 4) {
-      setAccountError('Enter the OTP sent to your mobile number.')
-      return
-    }
-
-    if (!isExistingAccountCheckout && !name) {
-      setAccountError('Your checkout profile is missing. Please reopen checkout and try again.')
-      return
-    }
-
-    if (!isExistingAccountCheckout && !gender) {
-      setAccountError('Your checkout gender selection is missing. Please reopen checkout and try again.')
-      return
-    }
-
-    const passwordError = !isExistingAccountCheckout ? validateAccountPassword(password) : ''
-
-    if (passwordError) {
-      setAccountError(passwordError)
-      return
-    }
-
-    if (!isExistingAccountCheckout && password !== confirmPassword) {
-      setAccountError('Passwords do not match.')
-      return
-    }
-
-    setAccountSetupLoading(true)
-    setAccountError('')
-    void logLocalCheckoutDebug('checkout_otp_verify_request', {
-      paymentOrderId,
-      claimPresent: Boolean(claimToken),
-      codePresent: Boolean(code),
-      passwordPresent: Boolean(password),
-      namePresent: Boolean(name),
-      gender,
-      isExistingAccountCheckout,
-    })
-
-    try {
-      const completed = await apiFetch<CheckoutOtpVerifyResponse>('/auth/checkout/otp/verify', {
-        method: 'POST',
-        skipAuth: true,
-        body: JSON.stringify({
-          paymentOrderId,
-          claimToken,
-          code,
-          name: isExistingAccountCheckout ? undefined : name,
-          gender: isExistingAccountCheckout ? undefined : gender,
-          password: isExistingAccountCheckout ? undefined : password,
-          privacyPolicyVersion: privacyPolicyVersion || undefined,
-        }),
-      })
-
-      tokenStore.setTokens({
-        accessToken: completed.accessToken,
-        refreshToken: completed.refreshToken,
-      })
-
-      if (!completed.accessToken) {
-        throw new Error('Account setup completed, but the backend did not return an access token.')
-      }
-
-      clearStoredCheckoutSession()
-
-      await Promise.allSettled([
-        apiFetch('/me'),
-        apiFetch('/me/courses'),
-      ])
-
-      const emailVerificationRequired = isCheckoutEmailVerificationRequired(completed)
-
-      setAuthMode('bearer')
-      setAccountOtp('')
-      setAccountOtpStarted(false)
-      setAccountPassword('')
-      setAccountConfirmPassword('')
-      setScreen('success')
-      setShowSuccessModal(false)
-      setResult({
-        title: 'Access unlocked',
-        message: getAccountActivationSuccessMessage(isExistingAccountCheckout, emailVerificationRequired),
-        tone: 'success',
-      })
-      setStatusNote('Account activated successfully.')
-      void logLocalCheckoutDebug('checkout_otp_verify_success', {
-        paymentOrderId,
-        accountReady: Boolean(completed.accountReady),
-        accessTokenPresent: Boolean(completed.accessToken),
-        refreshTokenPresent: Boolean(completed.refreshToken),
-        emailVerificationRequired,
-        subscriptionStatus: completed.subscription?.status || '',
-      })
-      postMobileEvent('AUTH_SUCCESS', {
-        accessToken: completed.accessToken,
-        refreshToken: completed.refreshToken,
-      })
-      postMobileEvent('PAYMENT_SUCCESS', {
-        status: 'success',
-        orderId: paymentOrderId,
-      })
-    } catch (error) {
-      void logLocalCheckoutDebug('checkout_otp_verify_error', {
-        paymentOrderId,
-        message: getAccountSetupErrorMessage(error, 'Could not complete account setup.'),
-        status: error instanceof PaymentApiError ? error.status : undefined,
-        errorCode: getPaymentErrorCode(error),
-      })
-      setAccountError(getAccountSetupErrorMessage(error, 'Could not complete account setup. Please try again.'))
-    } finally {
-      setAccountSetupLoading(false)
-    }
+    setAccountError('Account setup now happens before payment. Please restart checkout.')
   }
 
   function getReturnTarget(returnUrl: string | undefined, status: 'success' | 'pending' | 'failed') {
@@ -3120,9 +2977,7 @@ export default function PaymentPage() {
     } else {
       label = checkoutLoading
         ? 'Preparing checkout...'
-        : checkoutPricing
-          ? `Continue to pay ${formatCurrency(checkoutPricing.finalAmountPaise, checkoutPricing.currency)}`
-          : 'Continue to pay'
+        : 'Continue to payment'
       disabled = checkoutLoading || (shouldWaitForRazorpay && !razorpayReady) || !selectedPlan || !canRetryCheckout
       onClick = handlePayNow
       showArrow = true
@@ -3173,7 +3028,7 @@ export default function PaymentPage() {
       return result?.returnUrl ? 'Return to app' : 'Payment pending'
     }
 
-    return checkoutLoading ? 'Opening Razorpay...' : 'Pay & Start Learning'
+    return checkoutLoading ? 'Opening Razorpay...' : 'Continue to payment'
   }
 
   function isPrimaryActionDisabled() {
@@ -3181,17 +3036,12 @@ export default function PaymentPage() {
       return otpLoading || phone.trim().length < 10 || (otpRequested && otp.trim().length < 4)
     }
 
-    if (isPrimaryPaymentLinksFlow && !sessionUser) {
+    if (isPrimaryPaymentLinksFlow && !hasAuthenticatedCheckoutSession) {
       return (
         checkoutLoading ||
         screen === 'processing' ||
         screen === 'pending' ||
-        !selectedPlan ||
-        phone.trim().length < 10 ||
-        !billingDetails.email.trim() ||
-        !checkoutName.trim() ||
-        !checkoutGender ||
-        !checkoutTermsAccepted
+        !selectedPlan
       )
     }
 
@@ -3512,6 +3362,365 @@ export default function PaymentPage() {
           </div>
         </form>
       </div>
+    )
+  }
+
+  function renderCheckoutAuthForm() {
+    return (
+      <div className="space-y-3">
+        <section className="overflow-hidden rounded-[22px] border border-[#f1eafc] bg-white shadow-[0_18px_42px_rgba(61,45,99,0.09)]">
+          <div className="grid grid-cols-2 gap-1 border-b border-[#f0edf5] bg-[#fbfaff] p-1.5">
+            {([
+              { label: 'Create account', value: 'signup' as CheckoutAuthTab },
+              { label: 'Log in', value: 'login' as CheckoutAuthTab },
+            ]).map((tab) => {
+              const active = checkoutAuthTab === tab.value
+
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => {
+                    setCheckoutAuthTab(tab.value)
+                    setAuthError('')
+                    setBillingError('')
+                    setPageError('')
+                  }}
+                  disabled={checkoutAuthLoading}
+                  className={cn(
+                    'min-h-10 rounded-[14px] px-3 py-2 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60',
+                    active
+                      ? 'bg-white text-[#6b21a8] shadow-[0_10px_24px_rgba(107,33,168,0.10)]'
+                      : 'text-[#7d758b] hover:text-[#6b21a8]'
+                  )}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="p-3.5">
+            {checkoutAuthTab === 'signup' ? renderCheckoutSignupForm() : renderCheckoutLoginForm()}
+          </div>
+        </section>
+
+        <div className="space-y-2.5">
+          {authError && <MessageBanner tone="danger">{authError}</MessageBanner>}
+          {billingError && <MessageBanner tone="danger">{billingError}</MessageBanner>}
+          {pageError && <MessageBanner tone="danger">{pageError}</MessageBanner>}
+        </div>
+
+        <PaymentTrustBadges />
+        {renderPlanSummary()}
+      </div>
+    )
+  }
+
+  function renderCheckoutSignupForm() {
+    const disabled = checkoutAuthLoading
+    const detailsDisabled = disabled || checkoutSignupOtpStarted
+    const selectedCourseId = selectedCourse?.courseId || selectedCoursePreview?.courseId || ''
+    const primaryLabel = checkoutSignupOtpStarted
+      ? checkoutAuthLoading && checkoutAuthAction === 'signup-verify'
+        ? 'Verifying account...'
+        : 'Create account and continue'
+      : checkoutAuthLoading && checkoutAuthAction === 'signup-start'
+        ? 'Sending OTP...'
+        : 'Send OTP'
+
+    return (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (checkoutSignupOtpStarted) {
+            void handleVerifyCheckoutSignup()
+            return
+          }
+          void handleStartCheckoutSignup()
+        }}
+        className="space-y-3 text-[#211536]"
+      >
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6b21a8]">
+            Create your account
+          </p>
+          <p className="mt-1 text-sm font-semibold leading-5 text-[#5f566c]">
+            Sign up once, then complete secure payment.
+          </p>
+        </div>
+
+        <div className="grid gap-2">
+          <InputField
+            label="Full name"
+            placeholder="Your name"
+            value={checkoutName}
+            onChange={(value) => {
+              setCheckoutName(value)
+              setBillingError('')
+            }}
+            disabled={detailsDisabled}
+          />
+
+          <InputField
+            label="Email address"
+            placeholder="you@email.com"
+            value={billingDetails.email}
+            onChange={(value) => updateBillingField('email', value)}
+            inputMode="email"
+            type="email"
+            disabled={detailsDisabled}
+          />
+
+          <InputField
+            label="Mobile number"
+            hint="+91"
+            placeholder="10-digit number"
+            value={phone}
+            onChange={(value) => {
+              setPhone(value.replace(/\D/g, '').slice(0, 10))
+              setAuthError('')
+              setBillingError('')
+            }}
+            inputMode="numeric"
+            disabled={detailsDisabled}
+          />
+
+          <SignupGenderField
+            disabled={detailsDisabled}
+            value={checkoutGender}
+            onChange={(value) => {
+              setCheckoutGender(value)
+              setBillingError('')
+            }}
+          />
+
+          <CourseSelectorField
+            courses={checkoutCourseOptions}
+            disabled={detailsDisabled}
+            label="Select your course"
+            onChange={handleSelectCourseGroup}
+            value={selectedCourseId}
+          />
+
+          <PasswordInputField
+            label="Password"
+            placeholder="At least 8 characters"
+            value={checkoutPassword}
+            onChange={(value) => {
+              setCheckoutPassword(value)
+              setBillingError('')
+            }}
+            disabled={detailsDisabled}
+            visible={checkoutPasswordVisible}
+            onToggleVisible={() => setCheckoutPasswordVisible((current) => !current)}
+          />
+
+          {!checkoutSignupOtpStarted && <PasswordRequirementChecklist password={checkoutPassword} />}
+
+          <PasswordInputField
+            label="Confirm password"
+            placeholder="Re-enter password"
+            value={checkoutConfirmPassword}
+            onChange={(value) => {
+              setCheckoutConfirmPassword(value)
+              setBillingError('')
+            }}
+            disabled={detailsDisabled}
+            visible={checkoutPasswordVisible}
+            onToggleVisible={() => setCheckoutPasswordVisible((current) => !current)}
+          />
+
+          {checkoutSignupOtpStarted && (
+            <InputField
+              label="OTP"
+              placeholder="Enter OTP"
+              value={checkoutSignupOtp}
+              onChange={(value) => {
+                setCheckoutSignupOtp(value.replace(/\D/g, '').slice(0, 6))
+                setAuthError('')
+              }}
+              inputMode="numeric"
+              disabled={disabled}
+            />
+          )}
+        </div>
+
+        {!checkoutSignupOtpStarted && (
+          <label className="flex items-start gap-3 rounded-[14px] border border-[#eee7f7] bg-[#fbfaff] px-3 py-2.5 text-xs leading-5 text-[#62576f]">
+            <input
+              type="checkbox"
+              checked={checkoutTermsAccepted}
+              onChange={(event) => {
+                setCheckoutTermsAccepted(event.target.checked)
+                setBillingError('')
+              }}
+              disabled={disabled}
+              className="mt-0.5 h-4 w-4 rounded border-purple-200 text-[#6b21a8] focus:ring-[#6b21a8]"
+            />
+            <span>
+              I accept the{' '}
+              <a href="/terms-and-conditions" className="font-bold text-[#6b21a8] hover:underline">
+                Terms
+              </a>{' '}
+              and{' '}
+              <a href="/privacy-policy" className="font-bold text-[#6b21a8] hover:underline">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        )}
+
+        <button
+          type="submit"
+          disabled={disabled || (checkoutSignupOtpStarted && checkoutSignupOtp.trim().length < 4)}
+          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#883bea_0%,#9c55ef_100%)] px-5 py-3 text-sm font-black text-white shadow-[0_18px_34px_rgba(126,57,224,0.30)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {primaryLabel}
+        </button>
+
+        {checkoutSignupOtpStarted && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => void handleStartCheckoutSignup()}
+              disabled={disabled}
+              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border border-purple-200 bg-white px-3 py-2 text-sm font-bold text-[#6b21a8] transition hover:border-[#6b21a8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {checkoutAuthLoading && checkoutAuthAction === 'signup-start' ? 'Resending...' : 'Resend OTP'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCheckoutSignupOtpStarted(false)
+                setCheckoutSignupOtp('')
+                setCheckoutSignupReference('')
+              }}
+              disabled={disabled}
+              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border border-[#eee7f7] bg-white px-3 py-2 text-sm font-bold text-[#6f667d] transition hover:border-[#cdb7f8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Edit details
+            </button>
+          </div>
+        )}
+      </form>
+    )
+  }
+
+  function renderCheckoutLoginForm() {
+    const disabled = checkoutAuthLoading
+    const primaryLabel = checkoutLoginOtpStarted
+      ? checkoutAuthLoading && checkoutAuthAction === 'login-verify'
+        ? 'Verifying login...'
+        : 'Log in and continue'
+      : checkoutAuthLoading && checkoutAuthAction === 'login-start'
+        ? 'Sending OTP...'
+        : 'Send OTP'
+
+    return (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (checkoutLoginOtpStarted) {
+            void handleVerifyCheckoutLogin()
+            return
+          }
+          void handleStartCheckoutLogin()
+        }}
+        className="space-y-3 text-[#211536]"
+      >
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6b21a8]">
+            Already have an account?
+          </p>
+          <p className="mt-1 text-sm font-semibold leading-5 text-[#5f566c]">
+            Log in to renew or extend your subscription.
+          </p>
+        </div>
+
+        <div className="grid gap-2">
+          <InputField
+            label="Phone number or email"
+            placeholder="10-digit number or you@email.com"
+            value={checkoutLoginIdentifier}
+            onChange={(value) => {
+              setCheckoutLoginIdentifier(value)
+              setAuthError('')
+            }}
+            inputMode="email"
+            disabled={disabled || checkoutLoginOtpStarted}
+          />
+
+          {checkoutLoginOtpStarted && (
+            <>
+              <div className="flex items-start justify-between gap-3 rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs leading-5 text-emerald-800">
+                <p className="min-w-0">
+                  OTP sent to <span className="font-black">{checkoutLoginOtpTarget || 'your linked mobile'}</span>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckoutLoginOtpStarted(false)
+                    setCheckoutLoginOtp('')
+                    setCheckoutLoginOtpTarget('')
+                    setAuthError('')
+                  }}
+                  disabled={disabled}
+                  className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-[#6b21a8] transition hover:bg-[#f4eeff] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Edit
+                </button>
+              </div>
+
+              <InputField
+                label="OTP"
+                placeholder="Enter OTP"
+                value={checkoutLoginOtp}
+                onChange={(value) => {
+                  setCheckoutLoginOtp(value.replace(/\D/g, '').slice(0, 6))
+                  setAuthError('')
+                }}
+                inputMode="numeric"
+                disabled={disabled}
+              />
+            </>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={disabled || (checkoutLoginOtpStarted && checkoutLoginOtp.trim().length < 4)}
+          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#883bea_0%,#9c55ef_100%)] px-5 py-3 text-sm font-black text-white shadow-[0_18px_34px_rgba(126,57,224,0.30)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {primaryLabel}
+        </button>
+
+        {checkoutLoginOtpStarted && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => void handleStartCheckoutLogin()}
+              disabled={disabled}
+              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border border-purple-200 bg-white px-3 py-2 text-sm font-bold text-[#6b21a8] transition hover:border-[#6b21a8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {checkoutAuthLoading && checkoutAuthAction === 'login-start' ? 'Resending...' : 'Resend OTP'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCheckoutLoginOtpStarted(false)
+                setCheckoutLoginOtp('')
+                setCheckoutLoginOtpTarget('')
+              }}
+              disabled={disabled}
+              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border border-[#eee7f7] bg-white px-3 py-2 text-sm font-bold text-[#6f667d] transition hover:border-[#cdb7f8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Edit login
+            </button>
+          </div>
+        )}
+      </form>
     )
   }
 
@@ -3889,6 +4098,10 @@ export default function PaymentPage() {
 
     if (screen === 'otp') {
       return renderCheckoutForm()
+    }
+
+    if (screen === 'auth') {
+      return renderCheckoutAuthForm()
     }
 
     if (screen === 'planSelect') {
@@ -4791,9 +5004,22 @@ function PasswordInputField({
           type="button"
           onClick={onToggleVisible}
           disabled={disabled}
-          className="ml-3 shrink-0 rounded-full px-2 py-1 text-[11px] font-black text-[#6b21a8] transition hover:bg-[#f4eeff] disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          title={visible ? 'Hide password' : 'Show password'}
+          className="relative ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6b21a8] transition-colors duration-200 ease-out hover:bg-[#f4eeff] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {visible ? 'Hide' : 'View'}
+          <EyeIcon
+            className={cn(
+              'absolute h-[18px] w-[18px] transition-all duration-200 ease-out',
+              visible ? 'scale-75 rotate-12 opacity-0' : 'scale-100 rotate-0 opacity-100'
+            )}
+          />
+          <EyeOffIcon
+            className={cn(
+              'absolute h-[18px] w-[18px] transition-all duration-200 ease-out',
+              visible ? 'scale-100 rotate-0 opacity-100' : 'scale-75 -rotate-12 opacity-0'
+            )}
+          />
         </button>
       </div>
     </label>
@@ -4801,27 +5027,37 @@ function PasswordInputField({
 }
 
 function PasswordRequirementChecklist({ password }: { password: string }) {
+  const requirements = getPasswordRequirementChecks(password)
+  const allRequirementsMet = requirements.every((requirement) => requirement.met)
+
   return (
-    <div className="grid gap-1.5 rounded-[14px] border border-[#eee7f7] bg-[#fbfaff] px-3 py-2.5">
-      {getPasswordRequirementChecks(password).map((requirement) => (
-        <div
-          key={requirement.key}
-          className={cn(
-            'flex items-center gap-2 text-xs font-semibold leading-5 transition',
-            requirement.met ? 'text-[#047857]' : 'text-[#8a8098]'
-          )}
-        >
-          <span
+    <div
+      className={cn(
+        'overflow-hidden transition-all duration-300 ease-out',
+        allRequirementsMet ? 'max-h-0 -translate-y-1 opacity-0' : 'max-h-72 translate-y-0 opacity-100'
+      )}
+    >
+      <div className="grid gap-1.5 rounded-[14px] border border-[#eee7f7] bg-[#fbfaff] px-3 py-2.5">
+        {requirements.map((requirement) => (
+          <div
+            key={requirement.key}
             className={cn(
-              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition',
-              requirement.met ? 'border-[#34d399] bg-[#d1fae5] text-[#047857]' : 'border-[#d8cfE5] bg-white text-transparent'
+              'flex items-center gap-2 text-xs font-semibold leading-5 transition-colors duration-200',
+              requirement.met ? 'text-[#047857]' : 'text-[#8a8098]'
             )}
           >
-            <CheckIcon className="h-2.5 w-2.5" />
-          </span>
-          <span>{requirement.label}</span>
-        </div>
-      ))}
+            <span
+              className={cn(
+                'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all duration-200',
+                requirement.met ? 'border-[#34d399] bg-[#d1fae5] text-[#047857]' : 'border-[#d8cfE5] bg-white text-transparent'
+              )}
+            >
+              <CheckIcon className="h-2.5 w-2.5" />
+            </span>
+            <span>{requirement.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -4889,6 +5125,26 @@ function CheckIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
       <path d="M5 10.5l3.2 3.2L15 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function EyeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M2.7 10s2.55-4.5 7.3-4.5 7.3 4.5 7.3 4.5-2.55 4.5-7.3 4.5S2.7 10 2.7 10z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M10 12.3a2.3 2.3 0 100-4.6 2.3 2.3 0 000 4.6z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+    </svg>
+  )
+}
+
+function EyeOffIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M8.15 5.72A7.62 7.62 0 0110 5.5c4.75 0 7.3 4.5 7.3 4.5a12.2 12.2 0 01-2.08 2.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M11.38 12.14A2.3 2.3 0 017.86 8.62" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M5.55 7.04A12.06 12.06 0 002.7 10s2.55 4.5 7.3 4.5a7.85 7.85 0 003.08-.62" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M3.8 3.8l12.4 12.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
     </svg>
   )
 }
@@ -5501,6 +5757,39 @@ function getPaymentErrorCode(error: unknown) {
   return ''
 }
 
+function extractCheckoutAuthReference(body: any) {
+  const candidates = [
+    body?.registrationId,
+    body?.pendingRegistrationId,
+    body?.verificationId,
+    body?.data?.registrationId,
+    body?.data?.pendingRegistrationId,
+    body?.data?.verificationId,
+  ]
+  const match = candidates.find((value) => typeof value === 'string' && value.trim())
+
+  return typeof match === 'string' ? match : ''
+}
+
+function getCheckoutAuthErrorMessage(error: unknown, fallback: string) {
+  const code = getPaymentErrorCode(error)
+  const message = getErrorMessage(error, '').toLowerCase()
+
+  if (code === 'EMAIL_ALREADY_IN_USE' || message.includes('email already')) {
+    return 'This email is already linked to an account. Use Log in to renew or extend your subscription, or enter the correct email for this phone.'
+  }
+
+  if (code === 'PHONE_ALREADY_IN_USE' || message.includes('phone already')) {
+    return 'This phone number is already linked to an account. Try logging in instead, or enter the email that belongs to this phone.'
+  }
+
+  if (code === 'PHONE_EMAIL_MISMATCH' || message.includes('phone') && message.includes('email')) {
+    return 'This phone number is linked to a different email. Log in with the linked email, or update the email to the correct one.'
+  }
+
+  return getErrorMessage(error, fallback)
+}
+
 function getTrialEligibilityMessage(quote: TrialQuoteResponse) {
   return (
     quote.eligibility?.message ||
@@ -5652,11 +5941,11 @@ function getAccountSetupErrorMessage(error: unknown, fallback: string) {
   }
 
   if (code === 'EMAIL_ALREADY_IN_USE') {
-    return 'This email already has an account. Use that account or choose another email.'
+    return 'This email is already linked to an account. Use Log in, or enter the correct email linked to this phone.'
   }
 
   if (code === 'PHONE_EMAIL_MISMATCH') {
-    return 'This phone number is linked to another email. Use the existing email for this phone.'
+    return 'This phone number is linked to a different email. Use Log in with the linked email, or enter the correct email for this phone.'
   }
 
   return getErrorMessage(error, fallback)
