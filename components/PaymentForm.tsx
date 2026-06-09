@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Script from 'next/script'
 import { useRouter } from 'next/router'
 import { PRICING } from '@/config/constants'
+import { trackMetaPixelEvent } from '@/lib/meta-pixel-client'
 
 interface PaymentFormProps {
   examType?: 'neet-pg' | 'other-exams'
@@ -219,14 +220,15 @@ export default function PaymentForm({ examType }: PaymentFormProps = {}) {
 
     try {
       // Track InitiateCheckout event for Meta Pixel
-      if (typeof window !== 'undefined' && window.fbq) {
-        window.fbq('track', 'InitiateCheckout', {
-          content_name: 'Virtual Library Membership',
-          content_category: examType || 'general',
-          value: appliedCoupon ? appliedCoupon.discountedAmount : PRICING.MEMBERSHIP_FEE,
-          currency: PRICING.CURRENCY,
-        });
-      }
+      trackMetaPixelEvent('InitiateCheckout', {
+        content_name: 'Virtual Library Membership',
+        content_category: examType || 'general',
+        value: appliedCoupon ? appliedCoupon.discountedAmount : PRICING.MEMBERSHIP_FEE,
+        currency: PRICING.CURRENCY,
+      }, undefined, {
+        source: 'components/PaymentForm',
+        examType: examType || 'general',
+      })
 
       // Create order on backend
       const response = await fetch('/api/payment/create-order', {

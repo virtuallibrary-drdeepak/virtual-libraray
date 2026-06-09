@@ -1,4 +1,5 @@
 import { ServerEvent, EventRequest, UserData, CustomData, Content } from 'facebook-nodejs-business-sdk';
+import { appendMetaPixelLog, maskMetaPixelIdentifier } from '@/lib/meta-pixel-file-logger';
 
 /**
  * Meta Conversions API Service
@@ -19,6 +20,34 @@ interface PurchaseEventData {
   ipAddress?: string;
 }
 
+function buildMetaCapiLogDetails(
+  eventName: string,
+  data: Partial<PurchaseEventData>,
+  pixelId?: string,
+  accessToken?: string
+) {
+  return {
+    service: 'meta-conversions',
+    eventName,
+    pixelId: maskMetaPixelIdentifier(pixelId),
+    accessTokenConfigured: Boolean(accessToken),
+    testEventCodeConfigured: Boolean(process.env.META_TEST_EVENT_CODE),
+    orderId: data.orderId,
+    paymentId: data.paymentId,
+    amount: data.amount,
+    currency: data.currency || 'INR',
+    eventSourceUrl: data.eventSourceUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://yourdomain.com',
+    userData: {
+      hasEmail: Boolean(data.email),
+      hasPhone: Boolean(data.phone),
+      hasFirstName: Boolean(data.firstName),
+      hasLastName: Boolean(data.lastName),
+      hasIpAddress: Boolean(data.ipAddress),
+      hasUserAgent: Boolean(data.userAgent),
+    },
+  };
+}
+
 /**
  * Send Purchase event to Meta Conversions API
  */
@@ -27,8 +56,22 @@ export async function sendMetaPurchaseEvent(data: PurchaseEventData): Promise<vo
     // Validate required environment variables
     const pixelId = process.env.META_PIXEL_ID;
     const accessToken = process.env.META_CONVERSIONS_API_ACCESS_TOKEN;
+    const logDetails = buildMetaCapiLogDetails('Purchase', data, pixelId, accessToken);
+
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_purchase_start',
+      level: 'info',
+      details: logDetails,
+    });
 
     if (!pixelId || !accessToken) {
+      await appendMetaPixelLog({
+        source: 'server',
+        event: 'capi_purchase_skipped_missing_config',
+        level: 'warn',
+        details: logDetails,
+      });
       console.warn('⚠️ Meta Conversions API not configured. Skipping event tracking.');
       return;
     }
@@ -79,7 +122,27 @@ export async function sendMetaPurchaseEvent(data: PurchaseEventData): Promise<vo
       eventRequest.setTestEventCode(process.env.META_TEST_EVENT_CODE);
     }
 
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_purchase_request',
+      level: 'info',
+      details: logDetails,
+    });
+
     const response = await eventRequest.execute();
+
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_purchase_success',
+      level: 'info',
+      details: {
+        ...logDetails,
+        response: {
+          eventsReceived: response.events_received,
+          fbtraceId: response.fbtrace_id,
+        },
+      },
+    });
 
     console.log('✅ Meta Purchase event sent successfully:', {
       orderId: data.orderId,
@@ -89,6 +152,17 @@ export async function sendMetaPurchaseEvent(data: PurchaseEventData): Promise<vo
     });
 
   } catch (error: any) {
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_purchase_error',
+      level: 'error',
+      details: {
+        orderId: data.orderId,
+        amount: data.amount,
+        currency: data.currency || 'INR',
+      },
+      error,
+    });
     // Log error but don't throw - conversion tracking failures shouldn't break payment flow
     console.error('❌ Failed to send Meta Purchase event:', error.message);
     if (error.response?.data) {
@@ -104,8 +178,22 @@ export async function sendMetaInitiateCheckoutEvent(data: Omit<PurchaseEventData
   try {
     const pixelId = process.env.META_PIXEL_ID;
     const accessToken = process.env.META_CONVERSIONS_API_ACCESS_TOKEN;
+    const logDetails = buildMetaCapiLogDetails('InitiateCheckout', data, pixelId, accessToken);
+
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_initiate_checkout_start',
+      level: 'info',
+      details: logDetails,
+    });
 
     if (!pixelId || !accessToken) {
+      await appendMetaPixelLog({
+        source: 'server',
+        event: 'capi_initiate_checkout_skipped_missing_config',
+        level: 'warn',
+        details: logDetails,
+      });
       console.warn('⚠️ Meta Conversions API not configured. Skipping event tracking.');
       return;
     }
@@ -150,7 +238,27 @@ export async function sendMetaInitiateCheckoutEvent(data: Omit<PurchaseEventData
       eventRequest.setTestEventCode(process.env.META_TEST_EVENT_CODE);
     }
 
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_initiate_checkout_request',
+      level: 'info',
+      details: logDetails,
+    });
+
     const response = await eventRequest.execute();
+
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_initiate_checkout_success',
+      level: 'info',
+      details: {
+        ...logDetails,
+        response: {
+          eventsReceived: response.events_received,
+          fbtraceId: response.fbtrace_id,
+        },
+      },
+    });
 
     console.log('✅ Meta InitiateCheckout event sent successfully:', {
       orderId: data.orderId,
@@ -159,6 +267,17 @@ export async function sendMetaInitiateCheckoutEvent(data: Omit<PurchaseEventData
     });
 
   } catch (error: any) {
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_initiate_checkout_error',
+      level: 'error',
+      details: {
+        orderId: data.orderId,
+        amount: data.amount,
+        currency: data.currency || 'INR',
+      },
+      error,
+    });
     console.error('❌ Failed to send Meta InitiateCheckout event:', error.message);
   }
 }
@@ -179,8 +298,28 @@ export async function testMetaConversionsAPI(): Promise<{ success: boolean; mess
   try {
     const pixelId = process.env.META_PIXEL_ID;
     const accessToken = process.env.META_CONVERSIONS_API_ACCESS_TOKEN;
+    const logDetails = buildMetaCapiLogDetails('PageView', {
+      amount: 1,
+      currency: 'INR',
+      eventSourceUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://yourdomain.com',
+      ipAddress: '127.0.0.1',
+      userAgent: 'Test Agent',
+    }, pixelId, accessToken);
+
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_test_start',
+      level: 'info',
+      details: logDetails,
+    });
 
     if (!pixelId || !accessToken) {
+      await appendMetaPixelLog({
+        source: 'server',
+        event: 'capi_test_skipped_missing_config',
+        level: 'warn',
+        details: logDetails,
+      });
       return {
         success: false,
         message: 'Meta Pixel ID or Access Token not configured',
@@ -213,7 +352,27 @@ export async function testMetaConversionsAPI(): Promise<{ success: boolean; mess
       eventRequest.setTestEventCode(process.env.META_TEST_EVENT_CODE);
     }
 
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_test_request',
+      level: 'info',
+      details: logDetails,
+    });
+
     const response = await eventRequest.execute();
+
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_test_success',
+      level: 'info',
+      details: {
+        ...logDetails,
+        response: {
+          eventsReceived: response.events_received,
+          fbtraceId: response.fbtrace_id,
+        },
+      },
+    });
 
     return {
       success: true,
@@ -221,6 +380,16 @@ export async function testMetaConversionsAPI(): Promise<{ success: boolean; mess
     };
 
   } catch (error: any) {
+    await appendMetaPixelLog({
+      source: 'server',
+      event: 'capi_test_error',
+      level: 'error',
+      details: {
+        pixelId: maskMetaPixelIdentifier(process.env.META_PIXEL_ID),
+        accessTokenConfigured: Boolean(process.env.META_CONVERSIONS_API_ACCESS_TOKEN),
+      },
+      error,
+    });
     return {
       success: false,
       message: `Meta Conversions API error: ${error.message}`,

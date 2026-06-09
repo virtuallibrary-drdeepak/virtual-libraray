@@ -2,6 +2,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import Head from 'next/head'
 import Header from '@/components/Header'
+import { trackMetaPixelEvent } from '@/lib/meta-pixel-client'
 
 export default function PaymentSuccess() {
   const router = useRouter()
@@ -50,13 +51,16 @@ export default function PaymentSuccess() {
         setPaymentDetails(data.data.paymentDetails)
         
         // Track Purchase event for Meta Pixel
-      if (typeof window !== 'undefined' && window.fbq && data.data.paymentDetails) {
-          window.fbq('track', 'Purchase', {
+        if (data.data.paymentDetails) {
+          trackMetaPixelEvent('Purchase', {
             content_name: 'Virtual Library Membership',
             content_category: data.data.paymentDetails?.examType || 'NEET-PG',
             value: data.data.paymentDetails?.amount / 100 || 0, // Convert paise to rupees
             currency: data.data.paymentDetails?.currency || 'INR',
-          });
+          }, undefined, {
+            source: 'pages/payment-success',
+            sessionValidated: true,
+          })
         }
         
         setLoading(false)
@@ -283,4 +287,3 @@ export default function PaymentSuccess() {
     </>
   )
 }
-
