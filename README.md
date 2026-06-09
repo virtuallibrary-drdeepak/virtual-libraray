@@ -54,6 +54,18 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Meta Pixel Diagnostics
+
+Meta Pixel browser events and Meta Conversions API calls can be written as JSONL records for debugging.
+
+```env
+# Enabled automatically in local development.
+META_PIXEL_FILE_LOGGING_ENABLED=true
+META_PIXEL_LOG_FILE=logs/meta-pixel.log
+```
+
+The default local file is `logs/meta-pixel.log`. Production logging is disabled unless `META_PIXEL_FILE_LOGGING_ENABLED=true` is set.
+
 ## 📡 API Endpoints
 
 ### Health Check

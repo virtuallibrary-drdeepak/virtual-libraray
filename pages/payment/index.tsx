@@ -35,6 +35,7 @@ import {
   verifyOtp,
 } from '@/lib/payment-client'
 import { getMarketingAttribution } from '@/lib/marketing-attribution'
+import { logMetaPixelClient, trackMetaPixelEvent } from '@/lib/meta-pixel-client'
 import {
   getPricingPlanMeta,
   PricingPlanCard,
@@ -5340,7 +5341,18 @@ function trackCommercePixel(
   fallbackCurrency?: string
 ) {
   try {
-    if (!eventId || typeof window === 'undefined' || !window.fbq) {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    if (!eventId) {
+      logMetaPixelClient('track_skipped_missing_event_id', {
+        eventName,
+        context: {
+          source: 'pages/payment/index',
+          planId: plan?.planId,
+        },
+      }, 'warn')
       return
     }
 
@@ -5348,25 +5360,57 @@ function trackCommercePixel(
 
     try {
       if (window.sessionStorage.getItem(storageKey)) {
+        logMetaPixelClient('track_skipped_duplicate_event_id', {
+          eventName,
+          eventId,
+          storageKey,
+          context: {
+            source: 'pages/payment/index',
+            planId: plan?.planId,
+          },
+        }, 'info')
         return
       }
-    } catch {
+    } catch (error) {
+      logMetaPixelClient('session_storage_read_error', {
+        eventName,
+        eventId,
+        storageKey,
+        error,
+      }, 'warn')
       // Pixel tracking should remain best-effort.
     }
 
-    window.fbq(
-      'track',
+    const tracked = trackMetaPixelEvent(
       eventName,
       buildCommercePixelPayload(plan, pricing, fallbackAmountPaise, fallbackCurrency),
-      { eventID: eventId }
+      { eventID: eventId },
+      {
+        source: 'pages/payment/index',
+        eventId,
+        planId: plan?.planId,
+      }
     )
 
-    try {
-      window.sessionStorage.setItem(storageKey, '1')
-    } catch {
-      // Avoid blocking checkout if session storage is unavailable.
+    if (tracked) {
+      try {
+        window.sessionStorage.setItem(storageKey, '1')
+      } catch (error) {
+        logMetaPixelClient('session_storage_write_error', {
+          eventName,
+          eventId,
+          storageKey,
+          error,
+        }, 'warn')
+        // Avoid blocking checkout if session storage is unavailable.
+      }
     }
-  } catch {
+  } catch (error) {
+    logMetaPixelClient('track_unhandled_error', {
+      eventName,
+      eventId,
+      error,
+    }, 'error')
     // Ad blockers or Pixel failures must not affect checkout.
   }
 }
