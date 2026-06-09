@@ -7,6 +7,7 @@ import {
   AvailableBillingCoupon,
   AvailableBillingCouponsResponse,
   BillingOrderResponse,
+  BillingCoupon,
   BillingPlan,
   BillingPlansResponse,
   BillingPricing,
@@ -93,6 +94,14 @@ type PixelPlan = {
   currency?: string
 }
 
+type StoredCheckoutPixelContext = {
+  orderId: string
+  plan: PixelPlan | null
+  pricing: BillingPricing | null
+  coupon: BillingCoupon | null
+  createdAt: string
+}
+
 type PaymentSessionUser = {
   email?: string
   name?: string
@@ -133,6 +142,7 @@ const CHECKOUT_ACCOUNT_EXISTS_KEY = 'checkoutAccountExists'
 const CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY = 'checkoutAccountSetupRequired'
 const CHECKOUT_SESSION_USER_KEY = 'checkoutSessionUser'
 const CHECKOUT_RETURN_URL_KEY = 'checkoutReturnUrl'
+const CHECKOUT_PIXEL_CONTEXT_KEY = 'checkoutPixelContext'
 const LEGACY_PAYMENT_ORDER_ID_KEY = 'lastPaymentOrderId'
 const MOBILE_CHECKOUT_CONTEXT_KEY = 'vl_mobile_checkout_context'
 const MOBILE_CHECKOUT_CONTEXT_TTL_MS = 30 * 60 * 1000
@@ -1919,13 +1929,16 @@ export default function PaymentPage() {
           marketingAttribution: getMarketingAttribution(),
         }),
       })
+      const orderPricing = order.pricing || checkoutPricing
+      const orderCoupon = order.coupon || getActivePixelCoupon(activeCouponCode, couponQuote)
 
       trackInitiateCheckoutPixel(
         order.plan,
-        order.pricing || checkoutPricing,
+        orderPricing,
         order.tracking,
         getBillingOrderAmountPaise(order),
-        order.currency || order.razorpay?.currency || order.plan.currency
+        order.currency || order.razorpay?.currency || order.plan.currency,
+        orderCoupon
       )
       openPaymentDestination(order)
     } catch (error) {
@@ -2000,12 +2013,16 @@ export default function PaymentPage() {
         return
       }
 
+      const paymentLinkPricing = created.pricing || checkoutPricing
+      const paymentLinkCoupon = created.coupon || getActivePixelCoupon(activeCouponCode, couponQuote)
+
       trackInitiateCheckoutPixel(
         selectedPlan,
-        created.pricing || checkoutPricing,
+        paymentLinkPricing,
         created.tracking,
         created.order.amountPaise,
-        created.order.currency
+        created.order.currency,
+        paymentLinkCoupon
       )
 
       if (typeof window !== 'undefined') {
@@ -2013,6 +2030,12 @@ export default function PaymentPage() {
         window.sessionStorage.removeItem(CHECKOUT_CLAIM_TOKEN_KEY)
         window.sessionStorage.setItem(CHECKOUT_PAYMENT_URL_KEY, paymentUrl)
         window.sessionStorage.setItem(CHECKOUT_SESSION_USER_KEY, '1')
+        rememberCheckoutPixelContext(
+          created.order.id,
+          selectedPlan,
+          paymentLinkPricing,
+          paymentLinkCoupon
+        )
         if (returnUrl) {
           window.sessionStorage.setItem(CHECKOUT_RETURN_URL_KEY, returnUrl)
         } else {
@@ -2188,7 +2211,8 @@ export default function PaymentPage() {
           order.pricing,
           verification.tracking,
           getBillingOrderAmountPaise(order),
-          order.currency || order.razorpay?.currency || order.plan.currency
+          order.currency || order.razorpay?.currency || order.plan.currency,
+          order.coupon || null
         )
         postMobileEvent('PAYMENT_SUCCESS', {
           status: 'success',
@@ -2547,13 +2571,25 @@ export default function PaymentPage() {
           pendingPollRef.current = null
         }
 
+        const storedPixelContext = getStoredCheckoutPixelContext(orderId)
+        const purchasePlan = getPixelPlanFromStatus(status) || storedPixelContext?.plan || selectedPlan
+        const purchasePricing = status.pricing || storedPixelContext?.pricing || checkoutPricing
+        const purchaseCoupon = status.coupon || storedPixelContext?.coupon || null
+        const purchaseFallbackAmountPaise =
+          status.pricing?.finalAmountPaise ??
+          status.order?.amountPaise ??
+          storedPixelContext?.pricing?.finalAmountPaise ??
+          purchasePlan?.amountPaise
+        const purchaseFallbackCurrency =
+          status.pricing?.currency ||
+          status.order?.currency ||
+          storedPixelContext?.pricing?.currency ||
+          purchasePlan?.currency
+
         await Promise.allSettled([
           apiFetch('/me/courses'),
           apiFetch('/me'),
         ])
-        if (storedCheckoutSession.sessionUser) {
-          clearStoredCheckoutSession()
-        }
 
         setScreen('success')
         setShowSuccessModal(Boolean(returnUrl))
@@ -2564,7 +2600,17 @@ export default function PaymentPage() {
           returnUrl,
         })
         setStatusNote('Payment completed successfully.')
-        trackPurchasePixel(selectedPlan, checkoutPricing, status.tracking)
+        trackPurchasePixel(
+          purchasePlan,
+          purchasePricing,
+          status.tracking,
+          purchaseFallbackAmountPaise,
+          purchaseFallbackCurrency,
+          purchaseCoupon
+        )
+        if (storedCheckoutSession.sessionUser) {
+          clearStoredCheckoutSession()
+        }
         postMobileEvent('PAYMENT_SUCCESS', {
           status: 'success',
           orderId,
@@ -2744,12 +2790,15 @@ export default function PaymentPage() {
       orderId: Boolean(window.sessionStorage.getItem(CHECKOUT_PAYMENT_ORDER_ID_KEY)),
       paymentUrl: Boolean(window.sessionStorage.getItem(CHECKOUT_PAYMENT_URL_KEY)),
       phone: Boolean(window.sessionStorage.getItem(CHECKOUT_PHONE_KEY)),
+      pixelContext: Boolean(window.sessionStorage.getItem(CHECKOUT_PIXEL_CONTEXT_KEY)),
       returnUrl: Boolean(window.sessionStorage.getItem(CHECKOUT_RETURN_URL_KEY)),
       sessionUser: Boolean(window.sessionStorage.getItem(CHECKOUT_SESSION_USER_KEY)),
     }
   }
 
   function getStoredCheckoutSessionDebugSummary(session = getStoredCheckoutSession()) {
+    const pixelContext = getStoredCheckoutPixelContext(session.orderId)
+
     return {
       accountExists: session.accountExists,
       accountSetupRequired: session.accountSetupRequired,
@@ -2760,6 +2809,10 @@ export default function PaymentPage() {
       orderId: session.orderId,
       paymentHost: getUrlHost(session.paymentUrl),
       phoneMasked: maskPhone(session.phoneE164),
+      pixelContextPresent: Boolean(pixelContext),
+      pixelContextPlanId: pixelContext?.plan?.planId || '',
+      pixelContextFinalAmountPaise: pixelContext?.pricing?.finalAmountPaise ?? null,
+      pixelContextCouponPresent: Boolean(pixelContext?.coupon?.code),
       returnUrlPresent: Boolean(session.returnUrl),
       sessionUser: session.sessionUser,
     }
@@ -2817,6 +2870,7 @@ export default function PaymentPage() {
     window.sessionStorage.removeItem(CHECKOUT_ACCOUNT_SETUP_REQUIRED_KEY)
     window.sessionStorage.removeItem(CHECKOUT_SESSION_USER_KEY)
     window.sessionStorage.removeItem(CHECKOUT_RETURN_URL_KEY)
+    window.sessionStorage.removeItem(CHECKOUT_PIXEL_CONTEXT_KEY)
   }
 
   async function openAccountSetup(orderId: string) {
@@ -5298,12 +5352,142 @@ function getCheckoutPricing(plan: BillingPlan | null, quote: BillingQuoteRespons
   }
 }
 
+function rememberCheckoutPixelContext(
+  orderId: string,
+  plan: PixelPlan | null,
+  pricing: BillingPricing | null | undefined,
+  coupon: BillingCoupon | null | undefined
+) {
+  if (typeof window === 'undefined' || !orderId) {
+    return
+  }
+
+  try {
+    const context: StoredCheckoutPixelContext = {
+      orderId,
+      plan: normalizePixelPlan(plan),
+      pricing: normalizePixelPricing(pricing),
+      coupon: normalizePixelCoupon(coupon),
+      createdAt: new Date().toISOString(),
+    }
+
+    window.sessionStorage.setItem(CHECKOUT_PIXEL_CONTEXT_KEY, JSON.stringify(context))
+  } catch {
+    // Pixel context is best-effort; checkout must continue if storage is unavailable.
+  }
+}
+
+function getStoredCheckoutPixelContext(orderId?: string): StoredCheckoutPixelContext | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawContext = window.sessionStorage.getItem(CHECKOUT_PIXEL_CONTEXT_KEY)
+
+    if (!rawContext) {
+      return null
+    }
+
+    const parsed = JSON.parse(rawContext) as StoredCheckoutPixelContext
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    if (orderId && parsed.orderId && parsed.orderId !== orderId) {
+      return null
+    }
+
+    return {
+      orderId: typeof parsed.orderId === 'string' ? parsed.orderId : '',
+      plan: normalizePixelPlan(parsed.plan),
+      pricing: normalizePixelPricing(parsed.pricing),
+      coupon: normalizePixelCoupon(parsed.coupon),
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+function getActivePixelCoupon(activeCouponCode: string, quote: BillingQuoteResponse | null): BillingCoupon | null {
+  if (quote?.coupon) {
+    return normalizePixelCoupon(quote.coupon)
+  }
+
+  if (activeCouponCode) {
+    return {
+      couponId: null,
+      code: activeCouponCode,
+    }
+  }
+
+  return null
+}
+
+function getPixelPlanFromStatus(status: PaymentLinkStatusResponse): PixelPlan | null {
+  return normalizePixelPlan(status.plan || null)
+}
+
+function normalizePixelPlan(plan: PixelPlan | null | undefined): PixelPlan | null {
+  if (!plan) {
+    return null
+  }
+
+  return {
+    planId: typeof plan.planId === 'string' ? plan.planId : undefined,
+    name: typeof plan.name === 'string' ? plan.name : undefined,
+    amountPaise: typeof plan.amountPaise === 'number' ? plan.amountPaise : undefined,
+    currency: typeof plan.currency === 'string' ? plan.currency : undefined,
+  }
+}
+
+function normalizePixelPricing(pricing: BillingPricing | null | undefined): BillingPricing | null {
+  if (!pricing || typeof pricing !== 'object') {
+    return null
+  }
+
+  if (
+    typeof pricing.baseAmountPaise !== 'number' ||
+    typeof pricing.discountAmountPaise !== 'number' ||
+    typeof pricing.finalAmountPaise !== 'number' ||
+    typeof pricing.currency !== 'string'
+  ) {
+    return null
+  }
+
+  return {
+    baseAmountPaise: pricing.baseAmountPaise,
+    discountAmountPaise: pricing.discountAmountPaise,
+    finalAmountPaise: pricing.finalAmountPaise,
+    currency: pricing.currency,
+  }
+}
+
+function normalizePixelCoupon(coupon: BillingCoupon | null | undefined): BillingCoupon | null {
+  if (!coupon || typeof coupon !== 'object' || typeof coupon.code !== 'string' || !coupon.code) {
+    return null
+  }
+
+  return {
+    couponId: typeof coupon.couponId === 'string' ? coupon.couponId : null,
+    code: coupon.code,
+    name: typeof coupon.name === 'string' ? coupon.name : coupon.name ?? null,
+    description: typeof coupon.description === 'string' ? coupon.description : coupon.description ?? null,
+    discountType: typeof coupon.discountType === 'string' ? coupon.discountType : undefined,
+    discountValue: typeof coupon.discountValue === 'number' ? coupon.discountValue : undefined,
+    maxDiscountPaise: typeof coupon.maxDiscountPaise === 'number' ? coupon.maxDiscountPaise : coupon.maxDiscountPaise ?? null,
+  }
+}
+
 function trackInitiateCheckoutPixel(
   plan: PixelPlan | null,
   pricing: BillingPricing | null | undefined,
   tracking?: BillingTracking,
   fallbackAmountPaise?: number,
-  fallbackCurrency?: string
+  fallbackCurrency?: string,
+  coupon?: BillingCoupon | null
 ) {
   trackCommercePixel(
     'InitiateCheckout',
@@ -5311,7 +5495,8 @@ function trackInitiateCheckoutPixel(
     plan,
     pricing,
     fallbackAmountPaise,
-    fallbackCurrency
+    fallbackCurrency,
+    coupon
   )
 }
 
@@ -5320,7 +5505,8 @@ function trackPurchasePixel(
   pricing: BillingPricing | null | undefined,
   tracking?: BillingTracking,
   fallbackAmountPaise?: number,
-  fallbackCurrency?: string
+  fallbackCurrency?: string,
+  coupon?: BillingCoupon | null
 ) {
   trackCommercePixel(
     'Purchase',
@@ -5328,7 +5514,8 @@ function trackPurchasePixel(
     plan,
     pricing,
     fallbackAmountPaise,
-    fallbackCurrency
+    fallbackCurrency,
+    coupon
   )
 }
 
@@ -5338,7 +5525,8 @@ function trackCommercePixel(
   plan: PixelPlan | null,
   pricing: BillingPricing | null | undefined,
   fallbackAmountPaise?: number,
-  fallbackCurrency?: string
+  fallbackCurrency?: string,
+  coupon?: BillingCoupon | null
 ) {
   try {
     if (typeof window === 'undefined') {
@@ -5383,12 +5571,13 @@ function trackCommercePixel(
 
     const tracked = trackMetaPixelEvent(
       eventName,
-      buildCommercePixelPayload(plan, pricing, fallbackAmountPaise, fallbackCurrency),
+      buildCommercePixelPayload(plan, pricing, fallbackAmountPaise, fallbackCurrency, coupon),
       { eventID: eventId },
       {
         source: 'pages/payment/index',
         eventId,
         planId: plan?.planId,
+        couponCode: coupon?.code,
       }
     )
 
@@ -5419,18 +5608,34 @@ function buildCommercePixelPayload(
   plan: PixelPlan | null,
   pricing: BillingPricing | null | undefined,
   fallbackAmountPaise?: number,
-  fallbackCurrency?: string
+  fallbackCurrency?: string,
+  coupon?: BillingCoupon | null
 ) {
   const amountPaise = pricing?.finalAmountPaise ?? fallbackAmountPaise ?? plan?.amountPaise ?? 0
+  const discountAmountPaise = pricing?.discountAmountPaise ?? 0
+  const hasCoupon = Boolean(coupon?.code || discountAmountPaise > 0)
   const payload: Record<string, unknown> = {
     value: amountPaise / 100,
     currency: pricing?.currency || fallbackCurrency || plan?.currency || 'INR',
     content_name: plan?.name || 'Virtual Library Membership',
     content_type: 'product',
+    coupon_applied: hasCoupon,
   }
 
   if (plan?.planId) {
     payload.content_ids = [plan.planId]
+  }
+
+  if (coupon?.code) {
+    payload.coupon_code = coupon.code
+  }
+
+  if (pricing?.baseAmountPaise != null) {
+    payload.original_value = pricing.baseAmountPaise / 100
+  }
+
+  if (discountAmountPaise > 0) {
+    payload.discount_value = discountAmountPaise / 100
   }
 
   return payload

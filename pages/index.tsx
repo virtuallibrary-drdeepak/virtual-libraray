@@ -1,9 +1,8 @@
 import Head from 'next/head'
 import Link from 'next/link'
-import { useRouter } from 'next/router'
-import type { MouseEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import SiteNavbar from '@/components/SiteNavbar'
+import { DiscountPlanSection, type DiscountDisplayPlan } from '@/components/v2/DiscountPlanSection'
 import VirtualStudyHero from '@/components/v2/VirtualStudyHero'
 import {
   apiFetch,
@@ -13,6 +12,7 @@ import {
   formatCurrency,
   PublicBillingPlansResponse,
 } from '@/lib/payment-client'
+import { fetchBestCouponOffers, type PlanCouponOffer } from '@/lib/plan-coupon-offers'
 
 const ECOSYSTEM_IMAGE = '/img/v2/ecosystem.png'
 const GOOGLE_PLAY_HREF = 'https://play.google.com/store/apps/details?id=in.virtuallibrary.virtuallibrary&hl=en_IN'
@@ -58,21 +58,7 @@ type Audience = {
   iconTone: string
 }
 
-type DisplayPlan = {
-  key: string
-  title: string
-  durationMonths: number
-  price: string
-  originalPrice: string
-  monthlyPrice: string
-  billingText: string
-  savingsLabel: string
-  valuePill: string
-  savingsText: string
-  href: string
-  badge?: string
-  featured?: boolean
-}
+type DisplayPlan = DiscountDisplayPlan
 
 const FEATURES: Feature[] = [
   {
@@ -345,6 +331,9 @@ const FALLBACK_PLANS: DisplayPlan[] = [
 
 export default function Home() {
   const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [planCouponOffers, setPlanCouponOffers] = useState<Record<string, PlanCouponOffer | null>>({})
+  const [couponPreviewLoading, setCouponPreviewLoading] = useState(false)
+  const [copiedCouponPlanId, setCopiedCouponPlanId] = useState('')
   const [availableCourses, setAvailableCourses] = useState<CourseSummary[]>([])
   const [selectedCourseId, setSelectedCourseId] = useState('')
   const [pricingLoading, setPricingLoading] = useState(true)
@@ -354,6 +343,10 @@ export default function Home() {
     let isMounted = true
 
     async function loadPlans() {
+      setPricingLoading(true)
+      setCouponPreviewLoading(false)
+      setPlanCouponOffers({})
+
       try {
         const [response, courseResponse] = await Promise.all([
           apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
@@ -373,19 +366,32 @@ export default function Home() {
           return
         }
 
-        setPlans(sortPlans(response.plans || []))
+        const nextPlans = sortPlans(response.plans || [])
+        setPlans(nextPlans)
         setAvailableCourses(sortCourseOptions(courseResponse?.courses || []))
         setPricingError('')
+        setPricingLoading(false)
+
+        if (nextPlans.length) {
+          setCouponPreviewLoading(true)
+          const offers = await fetchBestCouponOffers(nextPlans)
+
+          if (isMounted) {
+            setPlanCouponOffers(offers)
+          }
+        }
       } catch (error) {
         if (!isMounted) {
           return
         }
 
         setPlans([])
+        setPlanCouponOffers({})
         setPricingError(getErrorMessage(error))
       } finally {
         if (isMounted) {
           setPricingLoading(false)
+          setCouponPreviewLoading(false)
         }
       }
     }
@@ -435,9 +441,25 @@ export default function Home() {
     })
 
     return Array.from(livePlansByDuration.values()).map((plan) => {
-      return getDisplayPlanFromBillingPlan(plan, plan.planId === recommendedPlanId, selectedCourse)
+      return getDisplayPlanFromBillingPlan(plan, plan.planId === recommendedPlanId, selectedCourse, planCouponOffers[plan.planId])
     })
-  }, [plans, selectedCourse, selectedCourseId])
+  }, [planCouponOffers, plans, selectedCourse, selectedCourseId])
+
+  async function handleCopyCoupon(planId: string, code: string) {
+    if (!code) {
+      return
+    }
+
+    try {
+      await navigator.clipboard?.writeText(code)
+      setCopiedCouponPlanId(planId)
+      window.setTimeout(() => {
+        setCopiedCouponPlanId((current) => (current === planId ? '' : current))
+      }, 1600)
+    } catch {
+      setCopiedCouponPlanId('')
+    }
+  }
 
   return (
     <>
@@ -460,9 +482,12 @@ export default function Home() {
           <AudienceSection />
           <PocketSection />
           <StudyEcosystemSection />
-          <PlanSection
+          <DiscountPlanSection
+            copiedCouponPlanId={copiedCouponPlanId}
+            couponPreviewLoading={couponPreviewLoading}
             courseOptions={courseOptions}
             displayPlans={displayPlans}
+            onCopyCoupon={handleCopyCoupon}
             onCourseChange={setSelectedCourseId}
             pricingError={pricingError}
             pricingLoading={pricingLoading}
@@ -727,187 +752,6 @@ function StudyEcosystemSection() {
             alt="Virtual Library app screens for study rooms, focus mode, and sessions"
             className="relative mx-auto w-full max-w-[760px] object-contain drop-shadow-[0_28px_38px_rgba(42,25,91,0.16)] sm:max-w-[820px] lg:max-w-[560px] xl:max-w-[620px]"
           />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function PlanSection({
-  courseOptions,
-  displayPlans,
-  onCourseChange,
-  pricingError,
-  pricingLoading,
-  selectedCourseId,
-}: {
-  courseOptions: CourseSummary[]
-  displayPlans: DisplayPlan[]
-  onCourseChange: (courseId: string) => void
-  pricingError: string
-  pricingLoading: boolean
-  selectedCourseId: string
-}) {
-  const router = useRouter()
-
-  function handlePlanClick(event: MouseEvent<HTMLAnchorElement>, plan: DisplayPlan) {
-    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
-      return
-    }
-
-    event.preventDefault()
-
-    const documentWithTransition = document as Document & {
-      startViewTransition?: (callback: () => void | Promise<unknown>) => { finished: Promise<void> }
-    }
-    const root = document.documentElement
-    const finishTransition = () => {
-      window.setTimeout(() => root.classList.remove('payment-route-transitioning'), 260)
-    }
-    const navigate = () => router.push(plan.href)
-
-    root.classList.add('payment-route-transitioning')
-
-    if (documentWithTransition.startViewTransition) {
-      const transition = documentWithTransition.startViewTransition(navigate)
-      void transition.finished.finally(finishTransition)
-      return
-    }
-
-    window.setTimeout(() => {
-      void navigate().finally(finishTransition)
-    }, 120)
-  }
-
-  return (
-    <section
-      id="plans"
-      className="relative scroll-mt-20 overflow-hidden bg-white py-14 sm:py-20"
-    >
-      <style jsx global>{`
-        @media (prefers-reduced-motion: no-preference) {
-          html.payment-route-transitioning main {
-            opacity: 0.97;
-            transform: translateY(2px);
-            transition: opacity 180ms ease, transform 180ms ease;
-          }
-
-          ::view-transition-old(root),
-          ::view-transition-new(root) {
-            animation-duration: 320ms;
-            animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-          }
-        }
-      `}</style>
-
-      <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="inline-flex h-10 items-center justify-center rounded-[15px] bg-[#e3d8ff] px-5 text-sm font-bold uppercase tracking-normal text-[#6d35df] shadow-[0_14px_34px_rgba(109,53,223,0.12)] ring-1 ring-white/70">
-            Limited time offer
-          </p>
-          <h2 className="mx-auto mt-5 max-w-[22rem] text-[2.05rem] font-extrabold leading-tight tracking-normal text-[#090713] sm:max-w-3xl sm:text-5xl">
-            Choose Your Plan
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-lg font-medium leading-7 text-[#8a6fb8] sm:text-2xl sm:leading-9">
-            One subscription. Unlimited focused study time, accountability and community.
-          </p>
-        </div>
-
-        {courseOptions.length > 0 && (
-          <div className="mx-auto mt-7 max-w-md">
-            <label className="block text-left">
-              <span className="mb-2 block text-sm font-bold text-[#786f89]">
-                Preparing for
-              </span>
-              <span className="relative block">
-                <select
-                  value={selectedCourseId}
-                  onChange={(event) => onCourseChange(event.target.value)}
-                  className="h-[52px] w-full appearance-none rounded-[18px] border border-[#e4daf2] bg-white px-4 py-3 pr-11 text-base font-extrabold text-[#171322] shadow-[0_14px_34px_rgba(48,32,88,0.08)] outline-none transition focus:border-[#7c3aed] focus:ring-4 focus:ring-[#ede7ff]"
-                >
-                  {courseOptions.map((course) => (
-                    <option key={course.courseId} value={course.courseId}>
-                      {course.title || 'Virtual Library Access'}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDownIcon className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7c3aed]" />
-              </span>
-            </label>
-          </div>
-        )}
-
-        <div className="mt-4 min-h-5 text-center text-xs font-bold text-[#786f89]">
-          {pricingLoading && 'Checking latest checkout prices...'}
-          {!pricingLoading && pricingError && 'Latest price is confirmed on the checkout page.'}
-        </div>
-
-        <div className="mx-auto mt-9 grid max-w-6xl gap-4 lg:grid-cols-4 lg:gap-5">
-          {displayPlans.map((plan) => {
-            const isPopular = Boolean(plan.badge)
-            const isFeatured = Boolean(plan.featured)
-
-            return (
-              <Link
-                key={plan.key}
-                href={plan.href}
-                onClick={(event) => handlePlanClick(event, plan)}
-                onMouseEnter={() => void router.prefetch(plan.href)}
-                className={`group relative flex min-h-[126px] flex-col rounded-[20px] border bg-white/[0.94] p-5 shadow-[0_14px_34px_rgba(48,32,88,0.07)] ring-1 ring-white/80 transition duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_22px_54px_rgba(82,48,170,0.13)] active:scale-[0.99] lg:min-h-[190px] lg:rounded-[24px] lg:p-6 ${isFeatured
-                  ? 'border-[#7c3aed] bg-[#f7f2ff]'
-                  : isPopular
-                    ? 'border-[#ff6b1a]/75'
-                    : 'border-[#e5deee]'
-                  }`}
-              >
-                <div className="min-w-0">
-                  <div className="flex items-start justify-between gap-3 lg:block">
-                    <h3 className="text-lg font-bold tracking-normal text-[#090713] lg:text-[1.25rem]">
-                      {plan.title}
-                    </h3>
-                    <div className="flex shrink-0 flex-wrap justify-end gap-1.5 lg:mt-3 lg:justify-start">
-                      {plan.badge && (
-                        <span className="rounded-full bg-[linear-gradient(135deg,#ff7a2f,#ff3f6c)] px-2.5 py-1 text-[0.62rem] font-bold uppercase text-white shadow-[0_10px_22px_rgba(255,77,92,0.20)]">
-                          Popular
-                        </span>
-                      )}
-                      <span className="rounded-full border border-[#10b981]/30 bg-[#d9fbe9] px-2.5 py-1 text-[0.65rem] font-bold uppercase text-[#079669]">
-                        {plan.savingsLabel}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="mt-2 text-sm font-bold leading-5 text-[#7b728b] lg:mt-3">
-                    {plan.monthlyPrice} <span className="font-bold text-[#9a91a8]">·</span> {plan.billingText}
-                  </p>
-                </div>
-
-                <div className="mt-4 flex items-end justify-between gap-4 lg:mt-auto lg:block">
-                  <div>
-                    <p className="text-xs font-extrabold text-[#a8a2b1] line-through">{plan.originalPrice}</p>
-                    <p className="mt-0.5 text-[1.7rem] font-extrabold leading-none tracking-normal text-[#090713] lg:text-[1.95rem]">
-                      {plan.price}
-                    </p>
-                  </div>
-
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f4efff] text-[#6d35df] transition duration-300 group-hover:bg-[#7c3aed] group-hover:text-white lg:hidden">
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </span>
-                </div>
-
-                <span className="mt-4 hidden h-10 w-full items-center justify-center gap-2 rounded-full bg-[#7c3aed] px-4 text-sm font-bold text-white shadow-[0_12px_26px_rgba(109,53,223,0.22)] ring-1 ring-[#7c3aed] transition duration-300 group-hover:bg-white group-hover:text-[#6d35df] group-hover:shadow-[0_14px_30px_rgba(109,53,223,0.13)] group-hover:ring-[#d8c9ff] lg:inline-flex">
-                  Continue
-                  <ArrowRightIcon className="h-4 w-4" />
-                </span>
-              </Link>
-            )
-          })}
-        </div>
-
-        <div className="mx-auto mt-8 max-w-xl text-center">
-          <p className="text-base font-semibold text-[#8a6fb8]">
-            Click any plan to continue to secure payment.
-          </p>
         </div>
       </div>
     </section>
@@ -1434,20 +1278,25 @@ function getRecommendedPlanId(plans: BillingPlan[]) {
 function getDisplayPlanFromBillingPlan(
   plan: BillingPlan,
   isRecommended: boolean,
-  selectedCourse: CourseSummary | null
+  selectedCourse: CourseSummary | null,
+  offer?: PlanCouponOffer | null
 ): DisplayPlan {
-  const savingsPercent = getPlanSavingsPercent(plan.durationMonths)
-  const originalAmountPaise = getOriginalAmountPaise(plan.amountPaise, savingsPercent)
-  const savingsAmountPaise = Math.max(originalAmountPaise - plan.amountPaise, 0)
-  const price = formatCurrency(plan.amountPaise, plan.currency)
-  const monthlyEquivalent = formatMonthlyEquivalent(plan)
+  const offerPricing = offer?.pricing
+  const displayAmountPaise = offerPricing?.finalAmountPaise ?? plan.amountPaise
+  const savingsPercent = offer ? offer.discountPercent : getPlanSavingsPercent(plan.durationMonths)
+  const originalAmountPaise = offerPricing && offerPricing.discountAmountPaise > 0
+    ? offerPricing.baseAmountPaise
+    : getOriginalAmountPaise(plan.amountPaise, savingsPercent)
+  const savingsAmountPaise = Math.max(originalAmountPaise - displayAmountPaise, 0)
+  const price = formatCurrencyCompact(displayAmountPaise, plan.currency)
+  const monthlyEquivalent = formatMonthlyEquivalent(plan, displayAmountPaise)
 
   return {
     key: plan.planId,
     title: formatPlanTitle(plan.durationMonths),
     durationMonths: plan.durationMonths,
     price,
-    originalPrice: formatCurrency(originalAmountPaise, plan.currency),
+    originalPrice: formatCurrencyCompact(originalAmountPaise, plan.currency),
     monthlyPrice: `${monthlyEquivalent}/month`,
     billingText: plan.durationMonths === 1 ? 'Billed monthly' : `Billed ${price}`,
     savingsLabel: `SAVE ${savingsPercent}%`,
@@ -1456,10 +1305,11 @@ function getDisplayPlanFromBillingPlan(
         ? `≈ ${formatDailyEquivalent(plan)}/day`
         : `≈ ${monthlyEquivalent}/Month${plan.durationMonths >= 24 ? ' — Max Savings' : ''}`,
     savingsText: savingsAmountPaise
-      ? `You save ${formatCurrency(savingsAmountPaise, plan.currency)} vs regular price!`
+      ? `You save ${formatCurrencyCompact(savingsAmountPaise, plan.currency)} vs regular price!`
       : 'Complete Virtual Library access for your selected duration.',
     href: buildPaymentHref(plan.durationMonths, selectedCourse || plan.course, plan.planId),
     badge: isRecommended ? 'MOST POPULAR' : undefined,
+    couponCode: offer?.coupon.code,
     featured: false,
   }
 }
@@ -1507,14 +1357,22 @@ function formatPlanTitle(durationMonths: number) {
   return `${durationMonths} ${durationMonths === 1 ? 'Month' : 'Months'}`
 }
 
-function formatMonthlyEquivalent(plan: BillingPlan) {
-  const monthlyAmountPaise = Math.round(plan.amountPaise / Math.max(plan.durationMonths, 1))
-  return formatCurrency(monthlyAmountPaise, plan.currency)
+function formatMonthlyEquivalent(plan: BillingPlan, amountPaise = plan.amountPaise) {
+  const monthlyAmountPaise = Math.round(amountPaise / Math.max(plan.durationMonths, 1))
+  return formatCurrencyCompact(monthlyAmountPaise, plan.currency)
 }
 
 function formatDailyEquivalent(plan: BillingPlan) {
   const days = plan.durationMonths === 1 ? 30 : Math.round((plan.durationMonths * 365) / 12)
-  return formatCurrency(Math.round(plan.amountPaise / Math.max(days, 1)), plan.currency)
+  return formatCurrencyCompact(Math.round(plan.amountPaise / Math.max(days, 1)), plan.currency)
+}
+
+function formatCurrencyCompact(amountPaise: number, currency = 'INR') {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amountPaise / 100)
 }
 
 function getPlanSavingsPercent(durationMonths: number) {
