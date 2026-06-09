@@ -207,11 +207,16 @@ export type PaymentLinkStatusResponse = {
   order?: {
     id: string
     status: string
+    amountPaise?: number
+    currency?: string
     providerOrderId?: string
     providerPaymentId?: string
     paidAt?: string
     accessGrantedAt?: string
   }
+  plan?: BillingOrderResponse['plan']
+  pricing?: BillingPricing
+  coupon?: BillingCoupon | null
   tracking?: BillingTracking
 }
 
