@@ -338,50 +338,59 @@ export default function Home() {
   const [selectedCourseId, setSelectedCourseId] = useState('')
   const [pricingLoading, setPricingLoading] = useState(true)
   const [pricingError, setPricingError] = useState('')
+  const pricingRequestRef = useRef(0)
 
   useEffect(() => {
     let isMounted = true
 
     async function loadPlans() {
+      const requestId = ++pricingRequestRef.current
+
       setPricingLoading(true)
       setCouponPreviewLoading(false)
       setPlanCouponOffers({})
 
       try {
-        const [response, courseResponse] = await Promise.all([
-          apiFetch<PublicBillingPlansResponse>('/billing/plans/public', {
-            headers: {
-              Accept: 'application/json',
-            },
-          }),
-          apiFetch<CourseOptionsResponse>('/courses/options', {
-            skipAuth: true,
-            headers: {
-              Accept: 'application/json',
-            },
-          }).catch(() => null),
-        ])
+        const courseResponse = await apiFetch<CourseOptionsResponse>('/courses/options', {
+          skipAuth: true,
+          headers: {
+            Accept: 'application/json',
+          },
+        }).catch(() => null)
 
-        if (!isMounted) {
+        if (!isMounted || pricingRequestRef.current !== requestId) {
           return
         }
 
-        const nextPlans = sortPlans(response.plans || [])
+        const nextCourseOptions = sortCourseOptions(courseResponse?.courses || [])
+        const initialCourse = getSelectedCourseOption(nextCourseOptions, selectedCourseId)
+        const response = await fetchPublicPlansForCourse(initialCourse)
+
+        if (!isMounted || pricingRequestRef.current !== requestId) {
+          return
+        }
+
+        const sortedPlans = sortPlans(response.plans || [])
+        const nextCourse = initialCourse || response.course || getCourseOptionsFromPlans(sortedPlans)[0] || null
+        const nextSelectedCourseId = nextCourse?.courseId || ''
+        const nextPlans = getPlansForCourse(sortedPlans, nextSelectedCourseId)
+
         setPlans(nextPlans)
-        setAvailableCourses(sortCourseOptions(courseResponse?.courses || []))
-        setPricingError('')
+        setAvailableCourses(nextCourseOptions)
+        setSelectedCourseId(nextSelectedCourseId)
+        setPricingError(nextPlans.length ? '' : 'No plans are available for this course yet.')
         setPricingLoading(false)
 
         if (nextPlans.length) {
           setCouponPreviewLoading(true)
           const offers = await fetchBestCouponOffers(nextPlans)
 
-          if (isMounted) {
+          if (isMounted && pricingRequestRef.current === requestId) {
             setPlanCouponOffers(offers)
           }
         }
       } catch (error) {
-        if (!isMounted) {
+        if (!isMounted || pricingRequestRef.current !== requestId) {
           return
         }
 
@@ -389,7 +398,7 @@ export default function Home() {
         setPlanCouponOffers({})
         setPricingError(getErrorMessage(error))
       } finally {
-        if (isMounted) {
+        if (isMounted && pricingRequestRef.current === requestId) {
           setPricingLoading(false)
           setCouponPreviewLoading(false)
         }
@@ -423,8 +432,58 @@ export default function Home() {
     })
   }, [courseOptions])
 
+  async function handleCourseChange(courseId: string) {
+    const nextCourse = getSelectedCourseOption(courseOptions, courseId)
+    const requestId = ++pricingRequestRef.current
+
+    setSelectedCourseId(courseId)
+    setPricingLoading(true)
+    setCouponPreviewLoading(false)
+    setPlanCouponOffers({})
+
+    try {
+      const response = await fetchPublicPlansForCourse(nextCourse)
+
+      if (pricingRequestRef.current !== requestId) {
+        return
+      }
+
+      const nextPlans = getPlansForCourse(sortPlans(response.plans || []), nextCourse?.courseId || response.course?.courseId || courseId)
+
+      setPlans(nextPlans)
+      setPricingError(nextPlans.length ? '' : 'No plans are available for this course yet.')
+      setPricingLoading(false)
+
+      if (nextPlans.length) {
+        setCouponPreviewLoading(true)
+        const offers = await fetchBestCouponOffers(nextPlans)
+
+        if (pricingRequestRef.current === requestId) {
+          setPlanCouponOffers(offers)
+        }
+      }
+    } catch (error) {
+      if (pricingRequestRef.current !== requestId) {
+        return
+      }
+
+      setPlans([])
+      setPlanCouponOffers({})
+      setPricingError(getErrorMessage(error))
+    } finally {
+      if (pricingRequestRef.current === requestId) {
+        setPricingLoading(false)
+        setCouponPreviewLoading(false)
+      }
+    }
+  }
+
   const displayPlans = useMemo(() => {
     if (!plans.length) {
+      if (pricingError) {
+        return []
+      }
+
       return FALLBACK_PLANS.map((fallback) => withCheckoutCourse(fallback, selectedCourse))
     }
 
@@ -443,7 +502,7 @@ export default function Home() {
     return Array.from(livePlansByDuration.values()).map((plan) => {
       return getDisplayPlanFromBillingPlan(plan, plan.planId === recommendedPlanId, selectedCourse, planCouponOffers[plan.planId])
     })
-  }, [planCouponOffers, plans, selectedCourse, selectedCourseId])
+  }, [planCouponOffers, plans, pricingError, selectedCourse, selectedCourseId])
 
   async function handleCopyCoupon(planId: string, code: string) {
     if (!code) {
@@ -488,7 +547,7 @@ export default function Home() {
             courseOptions={courseOptions}
             displayPlans={displayPlans}
             onCopyCoupon={handleCopyCoupon}
-            onCourseChange={setSelectedCourseId}
+            onCourseChange={handleCourseChange}
             pricingError={pricingError}
             pricingLoading={pricingLoading}
             selectedCourseId={selectedCourse?.courseId || ''}
@@ -1248,17 +1307,11 @@ function getSelectedCourseOption(courses: CourseSummary[], selectedCourseId: str
 }
 
 function getPlansForCourse(plans: BillingPlan[], selectedCourseId: string) {
-  const selectedCoursePlans = selectedCourseId
-    ? plans.filter((plan) => plan.course.courseId === selectedCourseId)
-    : []
-
-  if (selectedCoursePlans.length) {
-    return selectedCoursePlans
+  if (!selectedCourseId) {
+    return plans
   }
 
-  const defaultCoursePlans = plans.filter((plan) => isDefaultCourse(plan.course))
-
-  return defaultCoursePlans.length ? defaultCoursePlans : plans
+  return plans.filter((plan) => plan.course.courseId === selectedCourseId)
 }
 
 function getRecommendedPlanId(plans: BillingPlan[]) {
@@ -1293,7 +1346,7 @@ function getDisplayPlanFromBillingPlan(
 
   return {
     key: plan.planId,
-    title: formatPlanTitle(plan.durationMonths),
+    title: plan.name?.trim() || formatPlanTitle(plan.durationMonths),
     durationMonths: plan.durationMonths,
     price,
     originalPrice: formatCurrencyCompact(originalAmountPaise, plan.currency),
@@ -1319,6 +1372,29 @@ function withCheckoutCourse(plan: DisplayPlan, selectedCourse: CourseSummary | n
     ...plan,
     href: buildPaymentHref(plan.durationMonths, selectedCourse),
   }
+}
+
+function fetchPublicPlansForCourse(course: CourseSummary | null) {
+  return apiFetch<PublicBillingPlansResponse>(buildPublicPlansPath(course), {
+    skipAuth: true,
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+}
+
+function buildPublicPlansPath(course: CourseSummary | null) {
+  const params = new URLSearchParams()
+
+  if (course?.courseId) {
+    params.set('courseId', course.courseId)
+  } else if (course?.slug) {
+    params.set('courseSlug', course.slug)
+  }
+
+  const query = params.toString()
+
+  return `/billing/plans/public${query ? `?${query}` : ''}`
 }
 
 function buildPaymentHref(durationMonths: number, selectedCourse: CourseSummary | null, planId?: string) {
