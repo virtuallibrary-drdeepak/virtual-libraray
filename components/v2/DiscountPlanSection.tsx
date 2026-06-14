@@ -133,7 +133,7 @@ export function DiscountPlanSection({
         <div className="mt-3 min-h-5 text-center text-xs font-bold text-[#786f89]">
           {pricingLoading && 'Checking latest checkout prices...'}
           {!pricingLoading && couponPreviewLoading && 'Checking available coupons...'}
-          {!pricingLoading && pricingError && 'Latest price is confirmed on the checkout page.'}
+          {!pricingLoading && pricingError && pricingError}
         </div>
 
         <div className="mx-auto mt-7 grid max-w-7xl gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -149,11 +149,13 @@ export function DiscountPlanSection({
           ))}
         </div>
 
-        <div className="mx-auto mt-6 max-w-xl text-center">
+        {displayPlans.length > 0 && (
+          <div className="mx-auto mt-6 max-w-xl text-center">
           <p className="text-sm font-semibold text-[#8a6fb8]">
             Select a plan above to continue
           </p>
-        </div>
+          </div>
+        )}
       </div>
     </section>
   )

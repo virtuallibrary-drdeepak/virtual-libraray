@@ -1489,7 +1489,7 @@ function getDisplayPlanFromBillingPlan(
 
   return {
     key: plan.planId,
-    title: formatPlanTitle(plan.durationMonths),
+    title: plan.name?.trim() || formatPlanTitle(plan.durationMonths),
     durationMonths: plan.durationMonths,
     price,
     originalPrice: formatCurrencyCompact(originalAmountPaise, plan.currency),
