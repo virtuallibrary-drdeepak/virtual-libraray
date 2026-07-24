@@ -221,5 +221,44 @@ export class AttendanceService {
       date: { $gte: startOfDay, $lte: endOfDay },
     });
   }
+
+  /**
+   * Recalculate rankings from an already-stored attendance record.
+   * Useful after identity/aggregation logic changes without re-uploading files.
+   */
+  static async recalculateRankingForDate(date: Date): Promise<IDailyRanking | null> {
+    const record = await this.getAttendanceRecord(date);
+    if (!record) {
+      return null;
+    }
+
+    return this.calculateAndStoreRanking(record);
+  }
+
+  /**
+   * Recalculate rankings for every stored attendance record.
+   */
+  static async recalculateAllRankings(): Promise<{
+    total: number;
+    recalculated: Array<{ date: string; totalParticipants: number }>;
+  }> {
+    await connectDB();
+
+    const records = await AttendanceRecord.find({ status: 'processed' }).sort({
+      date: -1,
+    });
+
+    const recalculated: Array<{ date: string; totalParticipants: number }> = [];
+
+    for (const record of records) {
+      const ranking = await this.calculateAndStoreRanking(record);
+      recalculated.push({
+        date: record.date.toISOString().split('T')[0],
+        totalParticipants: ranking.totalParticipants,
+      });
+    }
+
+    return { total: recalculated.length, recalculated };
+  }
 }
 

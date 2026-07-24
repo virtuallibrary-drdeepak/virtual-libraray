@@ -31,6 +31,63 @@ export class RankingService {
   }
 
   /**
+   * Google Meet attendance exports often mask emails (e.g. shru**********@***.com).
+   * Masked values are not unique identities and can merge different people.
+   */
+  static isMaskedEmail(email?: string): boolean {
+    if (!email) return false;
+    return email.includes('*');
+  }
+
+  /**
+   * Normalize name parts so "Shruti Poddar" and firstName=Shruti/lastName=Poddar
+   * resolve to the same identity key.
+   */
+  static getNormalizedNameParts(
+    firstName: string,
+    lastName: string = ''
+  ): { firstName: string; lastName: string; fullNameKey: string } {
+    const parts = `${firstName || ''} ${lastName || ''}`
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      return { firstName: '', lastName: '', fullNameKey: '' };
+    }
+
+    if (parts.length === 1) {
+      return {
+        firstName: parts[0],
+        lastName: '',
+        fullNameKey: parts[0].toLowerCase(),
+      };
+    }
+
+    return {
+      firstName: parts[0],
+      lastName: parts.slice(1).join(' '),
+      fullNameKey: parts.map(part => part.toLowerCase()).join('_'),
+    };
+  }
+
+  /**
+   * Prefer a usable email when merging sessions. Masked emails are kept only
+   * as a fallback display value.
+   */
+  private static pickPreferredEmail(
+    current?: string,
+    incoming?: string
+  ): string | undefined {
+    const currentUsable =
+      current && !this.isMaskedEmail(current) ? current : undefined;
+    const incomingUsable =
+      incoming && !this.isMaskedEmail(incoming) ? incoming : undefined;
+
+    return incomingUsable || currentUsable || incoming || current;
+  }
+
+  /**
    * Aggregate attendance entries by attendee
    * Combines multiple sessions for the same person
    */
@@ -51,8 +108,12 @@ export class RankingService {
       }
 
       // Create unique key for attendee
-      // Priority: email > firstName + lastName
+      // Priority: unmasked email > normalized full name
       const key = this.createAttendeeKey(entry);
+      const normalizedName = this.getNormalizedNameParts(
+        entry.firstName,
+        entry.lastName
+      );
 
       if (attendeeMap.has(key)) {
         const existing = attendeeMap.get(key)!;
@@ -62,11 +123,20 @@ export class RankingService {
           timeJoined: entry.timeJoined,
           timeExited: entry.timeExited,
         });
+        // Prefer a split last name when an earlier row stuffed the full name into firstName
+        if (!existing.identifier.lastName && normalizedName.lastName) {
+          existing.identifier.firstName = normalizedName.firstName;
+          existing.identifier.lastName = normalizedName.lastName;
+        }
+        existing.identifier.email = this.pickPreferredEmail(
+          existing.identifier.email,
+          entry.email
+        );
       } else {
         attendeeMap.set(key, {
           identifier: {
-            firstName: entry.firstName,
-            lastName: entry.lastName,
+            firstName: normalizedName.firstName,
+            lastName: normalizedName.lastName,
             email: entry.email,
           },
           totalDuration: entry.duration,
@@ -87,24 +157,23 @@ export class RankingService {
   /**
    * Create unique key for attendee identification
    * Rules:
-   * 1. If email exists, use email (case-insensitive)
-   * 2. If no email but has lastName, use firstName + lastName
-   * 3. If only firstName, use firstName alone
-   * 4. For same name but different email, email takes precedence
+   * 1. If a real (unmasked) email exists, use email (case-insensitive)
+   * 2. Otherwise use normalized full name (handles "Shruti Poddar" vs Shruti/Poddar)
+   * 3. Masked emails like shru**********@***.com are ignored as identity keys
    */
   private static createAttendeeKey(entry: ParsedAttendanceEntry): string {
-    // Priority 1: Email (most reliable)
-    if (entry.email && entry.email.trim()) {
-      return `email:${entry.email.toLowerCase()}`;
+    const email = entry.email?.trim();
+
+    // Priority 1: Real email only — masked Meet exports collide across people
+    if (email && !this.isMaskedEmail(email)) {
+      return `email:${email.toLowerCase()}`;
     }
-    
-    // Priority 2: First name + Last name
-    if (entry.lastName && entry.lastName.trim()) {
-      return `name:${entry.firstName.toLowerCase()}_${entry.lastName.toLowerCase()}`;
-    }
-    
-    // Priority 3: First name only
-    return `name:${entry.firstName.toLowerCase()}`;
+
+    const { fullNameKey } = this.getNormalizedNameParts(
+      entry.firstName,
+      entry.lastName
+    );
+    return `name:${fullNameKey}`;
   }
 
   /**
