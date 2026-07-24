@@ -342,17 +342,14 @@ Names do not fully solve the problem either:
 
 Because ranking calculation depends on aggregating all sessions belonging to the same person, this ambiguity affects `totalDuration`, `sessionCount`, and final rank order.
 
-Current behavior:
+Current behavior (fixed):
 
-- If masked email is present, it is still used as the primary key.
-- If email is missing, the code falls back to name-based matching.
-- There is no special detection for masked emails.
-- There is no manual resolution or mapping table.
-
-Migration decision needed:
-
-- Decide how the new service should identify attendees when only masked email and incomplete names are available.
-- Until that is decided, this should be treated as an unresolved identity-resolution problem, not just a parser issue.
+- Masked emails (any email containing `*`) are **not** used as identity keys.
+- Unmasked emails remain the strongest identity key.
+- Otherwise attendees are keyed by a normalized full name, so
+  `firstName="Shruti Poddar"` and `firstName="Shruti"/lastName="Poddar"` match.
+- After changing aggregation logic, rankings can be rebuilt from stored attendance via
+  `POST /api/rankings/recalculate` or `node scripts/recalculate-rankings.js [YYYY-MM-DD]`.
 
 ### Ranking rules
 
